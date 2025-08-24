@@ -329,7 +329,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
               ),
             ),
 
-            // 데이터 전송
+            // 데이터 전송.
             Padding(
               padding: EdgeInsets.all(16),
               child: Row(
