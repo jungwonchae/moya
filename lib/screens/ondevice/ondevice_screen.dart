@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart'; // ✅ 추가
 
 class OndeviceScreen extends StatelessWidget {
+  const OndeviceScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -9,18 +12,19 @@ class OndeviceScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Color(0xFFFF85B4)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFFFF85B4), size: 24),
           onPressed: () => Navigator.pop(context),
+          splashRadius: 22,
         ),
       ),
       body: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            SizedBox(height: 40),
-            
-            // 제목
-            Text(
+            const SizedBox(height: 20),
+
+            const Text(
               'MOYA가\n확인해드려요!',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -30,10 +34,9 @@ class OndeviceScreen extends StatelessWidget {
                 height: 1.2,
               ),
             ),
-            
-            SizedBox(height: 10),
-            
-            // 부제목
+
+            const SizedBox(height: 10),
+
             Text(
               '모야가 혈자국을 대신 체크해드려요.',
               textAlign: TextAlign.center,
@@ -42,34 +45,36 @@ class OndeviceScreen extends StatelessWidget {
                 color: Colors.grey[600],
               ),
             ),
-            
-            SizedBox(height: 60),
-            
-            // 캐릭터 일러스트
-            Container(
-              width: 200,
-              height: 200,
-              child: CustomPaint(
-                painter: CharacterPainter(),
+
+            const SizedBox(height: 1),
+
+            // ✅ 중앙 Lottie 서치 애니메이션
+            SizedBox(
+              width: 350,
+              height: 350,
+              child: Lottie.asset(
+                'assets/lottie/searching.json',   // <- 여기에 파일 두면 됩니다
+                repeat: true,
+                animate: true,
+                fit: BoxFit.contain,
               ),
             ),
-            
-            SizedBox(height: 60),
-            
-            // 시작하기 버튼
-            Container(
+
+            const SizedBox(height: 1),
+
+            SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () => Navigator.pushNamed(context, '/ondevice_camera'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFFFF85B4),
-                  padding: EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: const Color(0xFFFF85B4),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(25),
                   ),
                   elevation: 0,
                 ),
-                child: Text(
+                child: const Text(
                   '시작하기',
                   style: TextStyle(
                     fontSize: 16,
@@ -79,13 +84,12 @@ class OndeviceScreen extends StatelessWidget {
                 ),
               ),
             ),
-            
-            Spacer(),
-            
-            // 하단 안내 문구
+
+            const Spacer(),
+
             Column(
               children: [
-                Text(
+                const Text(
                   '안심하세요!',
                   style: TextStyle(
                     fontSize: 16,
@@ -93,7 +97,7 @@ class OndeviceScreen extends StatelessWidget {
                     color: Color(0xFFFF85B4),
                   ),
                 ),
-                SizedBox(height: 5),
+                const SizedBox(height: 5),
                 Text(
                   '데이터는 안전하게, 기기 안에서만 처리됩니다',
                   style: TextStyle(
@@ -103,89 +107,11 @@ class OndeviceScreen extends StatelessWidget {
                 ),
               ],
             ),
-            
-            SizedBox(height: 30),
+
+            const SizedBox(height: 30),
           ],
         ),
       ),
     );
   }
-}
-
-// 캐릭터 그리기를 위한 CustomPainter
-class CharacterPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint();
-    
-    // 캐릭터 몸체 (흰색)
-    paint.color = Colors.white;
-    paint.style = PaintingStyle.fill;
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(size.width / 2, size.height / 2),
-        width: size.width * 0.7,
-        height: size.height * 0.8,
-      ),
-      paint,
-    );
-    
-    // 캐릭터 테두리 (검은색)
-    paint.color = Colors.black;
-    paint.style = PaintingStyle.stroke;
-    paint.strokeWidth = 3;
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(size.width / 2, size.height / 2),
-        width: size.width * 0.7,
-        height: size.height * 0.8,
-      ),
-      paint,
-    );
-    
-    // 팔
-    paint.style = PaintingStyle.fill;
-    canvas.drawOval(
-      Rect.fromLTWH(size.width * 0.05, size.height * 0.4, size.width * 0.15, size.height * 0.3),
-      paint,
-    );
-    canvas.drawOval(
-      Rect.fromLTWH(size.width * 0.8, size.height * 0.4, size.width * 0.15, size.height * 0.3),
-      paint,
-    );
-    
-    // 눈 (웃는 눈)
-    paint.color = Colors.black;
-    paint.strokeWidth = 2;
-    paint.style = PaintingStyle.stroke;
-    
-    // 왼쪽 눈
-    Path leftEye = Path();
-    leftEye.moveTo(size.width * 0.35, size.height * 0.35);
-    leftEye.quadraticBezierTo(size.width * 0.4, size.height * 0.4, size.width * 0.45, size.height * 0.35);
-    canvas.drawPath(leftEye, paint);
-    
-    // 오른쪽 눈
-    Path rightEye = Path();
-    rightEye.moveTo(size.width * 0.55, size.height * 0.35);
-    rightEye.quadraticBezierTo(size.width * 0.6, size.height * 0.4, size.width * 0.65, size.height * 0.35);
-    canvas.drawPath(rightEye, paint);
-    
-    // 볼터치 (핑크)
-    paint.color = Color(0xFFFF85B4);
-    paint.style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(size.width * 0.3, size.height * 0.45), size.width * 0.04, paint);
-    canvas.drawCircle(Offset(size.width * 0.7, size.height * 0.45), size.width * 0.04, paint);
-    
-    // 물방울 (핑크)
-    paint.color = Color(0xFFFF85B4);
-    Path droplet = Path();
-    droplet.moveTo(size.width * 0.5, size.height * 0.5);
-    droplet.quadraticBezierTo(size.width * 0.45, size.height * 0.55, size.width * 0.5, size.height * 0.65);
-    droplet.quadraticBezierTo(size.width * 0.55, size.height * 0.55, size.width * 0.5, size.height * 0.5);
-    canvas.drawPath(droplet, paint);
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
