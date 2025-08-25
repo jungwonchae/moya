@@ -36,7 +36,7 @@ class SettingScreen extends StatelessWidget {
           _buildSettingItem(
             '앱 사용 안내', 
             Icons.help, 
-            () => Navigator.pushNamed(context, '/usage_guide'),
+            () => Navigator.pushNamed(context, '/usage_container'),
           ),
           
           SizedBox(height: 20),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../usage/usage_first_screen.dart';
+import '../usage/usage_screens_container.dart';
+import 'package:moya_app/themes/colortheme.dart';
 
 class LoginScreen extends StatelessWidget {
   @override
@@ -70,7 +71,7 @@ class LoginScreen extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => UsageFirstScreen(isFromOnboarding: true),
+                            builder: (context) => UsageScreensContainer(isFromOnboarding: true),
                           ),
                         );
                       },
@@ -104,7 +105,7 @@ class LoginScreen extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => UsageFirstScreen(isFromOnboarding: true),
+                          builder: (context) => UsageScreensContainer(isFromOnboarding: true),
                         ),
                       );
                     },

@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:moya_app/themes/colortheme.dart';  // mainColor 가져오기
+import 'package:moya_app/widgets/confirm_button.dart';
+import 'package:moya_app/widgets/choice_button.dart';
 
 class InputPeriodDaysScreen extends StatefulWidget {
   @override
@@ -6,10 +10,14 @@ class InputPeriodDaysScreen extends StatefulWidget {
 }
 
 class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
-  int selectedDays = 5;
+  TextEditingController dayController = TextEditingController();
+
+  final List<String> dayPresets = ["3", "4", "5", "6"];
   
   @override
   Widget build(BuildContext context) {
+    final args = (ModalRoute.of(context)!.settings.arguments as Map?) ?? {};
+    final recentStartDate = args['recentStartDate'] as DateTime;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -23,15 +31,15 @@ class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
       body: Padding(
         padding: EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // 단계 표시
             Text(
               '생리 기간',
               style: TextStyle(
                 fontSize: 14,
-                color: Color(0xFFFF85B4),
-                fontWeight: FontWeight.w500,
+                color: ColorTheme.subColor,
+                fontWeight: FontWeight.w600,
               ),
             ),
             
@@ -40,11 +48,11 @@ class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
             // 제목
             Text(
               '생리는 보통\n며칠 동안 지속되나요?',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.black,
-                height: 1.3,
+                color: ColorTheme.textBlack,
               ),
             ),
             
@@ -55,161 +63,111 @@ class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
               '평균 며칠간 출혈이 지속되는지 알려주세요',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: ColorTheme.textGray,
               ),
             ),
             
-            SizedBox(height: 60),
+            SizedBox(height: 40),
             
             // 선택 버튼들
             Row(
               children: [
                 Expanded(
-                  child: _buildDaysButton(3),
+                  child: ChoiceButton<String>(
+                    value: dayPresets[0],
+                    label: "${dayPresets[0]}일",                 // 화면 표시용
+                    isSelected: dayController.text.trim() == dayPresets[0],
+                    onTap: () => setState(() => dayController.text = dayPresets[0]),
+                  ),
                 ),
-                SizedBox(width: 15),
+                const SizedBox(width: 15),
                 Expanded(
-                  child: _buildDaysButton(4),
+                  child: ChoiceButton<String>(
+                    value: dayPresets[1],
+                    label: "${dayPresets[1]}일",                 // 화면 표시용
+                    isSelected: dayController.text.trim() == dayPresets[1],
+                    onTap: () => setState(() => dayController.text = dayPresets[1]),
+                  ),
                 ),
               ],
             ),
-            
-            SizedBox(height: 15),
-            
+            const SizedBox(height: 15),
             Row(
               children: [
                 Expanded(
-                  child: _buildDaysButton(5),
+                  child: ChoiceButton<String>(
+                    value: dayPresets[2],
+                    label: "${dayPresets[2]}일",                 // 화면 표시용
+                    isSelected: dayController.text.trim() == dayPresets[2],
+                    onTap: () => setState(() => dayController.text = dayPresets[2]),
+                  ),
                 ),
-                SizedBox(width: 15),
+                const SizedBox(width: 15),
                 Expanded(
-                  child: _buildDaysButton(6),
+                  child: ChoiceButton<String>(
+                    value: dayPresets[3],
+                    label: "${dayPresets[3]}일",                 // 화면 표시용
+                    isSelected: dayController.text.trim() == dayPresets[3],
+                    onTap: () => setState(() => dayController.text = dayPresets[3]),
+                  ),
                 ),
               ],
             ),
             
-            SizedBox(height: 15),
+            const SizedBox(height: 15),
             
-            // 직접 입력
-            Container(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () {
-                  _showCustomInputDialog();
-                },
-                style: OutlinedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  side: BorderSide(color: Colors.grey[300]!),
+            // 입력 필드
+            TextField(
+              controller: dayController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly], //숫자만
+              decoration: InputDecoration(
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: ColorTheme.mainColor, width: 2),
                 ),
-                child: Text(
-                  '직접 입력',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.black87,
-                  ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: ColorTheme.subColor, width: 2),
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                suffixText: "일",
+              ),
+              onChanged: (value) {
+                setState(() {});
+              },
+            ),
+
+            SizedBox(height: 8),
+            
+
+            // 밑줄(입력) 아래 텍스트
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '직접 입력',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: ColorTheme.textLightGray,
                 ),
               ),
             ),
-            
+
             Spacer(),
             
             // 다음 버튼
-            Container(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pushNamed(context, '/input_extra'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFFFF85B4),
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  '다음',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
+            ConfirmButton(
+              text: '다음',
+              isEnabled: dayController.text.trim().isNotEmpty,
+              onPressed: () => Navigator.pushNamed(
+                context, '/input_extra',
+                arguments: {
+                      'recentStartDate' : recentStartDate,
+                }
               ),
             ),
             
             SizedBox(height: 20),
           ],
         ),
-      ),
-    );
-  }
-  
-  Widget _buildDaysButton(int days) {
-    bool isSelected = selectedDays == days;
-    
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedDays = days;
-        });
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: isSelected ? Color(0xFFFF85B4) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? Color(0xFFFF85B4) : Colors.grey[300]!,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            '${days}일',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: isSelected ? Colors.white : Colors.black87,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-  
-  void _showCustomInputDialog() {
-    TextEditingController controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('직접 입력'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            hintText: '일수를 입력하세요',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                setState(() {
-                  selectedDays = int.parse(controller.text);
-                });
-              }
-              Navigator.pop(context);
-            },
-            child: Text('확인'),
-          ),
-        ],
       ),
     );
   }

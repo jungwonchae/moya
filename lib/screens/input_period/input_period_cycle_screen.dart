@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:moya_app/themes/colortheme.dart';  // mainColor 가져오기
+import 'package:moya_app/widgets/confirm_button.dart';
+import 'package:moya_app/widgets/choice_button.dart';
 
 class InputPeriodCycleScreen extends StatefulWidget {
   @override
@@ -6,10 +10,15 @@ class InputPeriodCycleScreen extends StatefulWidget {
 }
 
 class _InputPeriodCycleScreenState extends State<InputPeriodCycleScreen> {
-  int selectedCycle = 28;
+  TextEditingController cycleController = TextEditingController();
+
+  final List<String> cyclePresets = ["20", "25", "28", "30"];
   
   @override
   Widget build(BuildContext context) {
+    final args = (ModalRoute.of(context)!.settings.arguments as Map?) ?? {};
+    final recentStartDate = args['recentStartDate'] as DateTime;
+    
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -23,15 +32,15 @@ class _InputPeriodCycleScreenState extends State<InputPeriodCycleScreen> {
       body: Padding(
         padding: EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // 단계 표시
             Text(
               '평균 주기 길이',
               style: TextStyle(
                 fontSize: 14,
-                color: Color(0xFFE91E63),
-                fontWeight: FontWeight.w500,
+                color: ColorTheme.subColor,
+                fontWeight: FontWeight.w600,
               ),
             ),
             
@@ -43,7 +52,7 @@ class _InputPeriodCycleScreenState extends State<InputPeriodCycleScreen> {
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.black,
+                color: ColorTheme.textBlack,
               ),
             ),
             
@@ -54,162 +63,111 @@ class _InputPeriodCycleScreenState extends State<InputPeriodCycleScreen> {
               '한 번 시작일부터 다음 시작일까지 걸리는 일수',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: ColorTheme.textGray,
               ),
             ),
             
-            SizedBox(height: 60),
+            SizedBox(height: 40),
             
             // 선택 버튼들
             Row(
               children: [
                 Expanded(
-                  child: _buildCycleButton(20),
+                  child: ChoiceButton<String>(
+                    value: cyclePresets[0],
+                    label: "${cyclePresets[0]}일",                 // 화면 표시용
+                    isSelected: cycleController.text.trim() == cyclePresets[0],
+                    onTap: () => setState(() => cycleController.text = cyclePresets[0]),
+                  ),
                 ),
-                SizedBox(width: 15),
+                const SizedBox(width: 15),
                 Expanded(
-                  child: _buildCycleButton(25),
+                  child: ChoiceButton<String>(
+                    value: cyclePresets[1],
+                    label: "${cyclePresets[1]}일",                 // 화면 표시용
+                    isSelected: cycleController.text.trim() == cyclePresets[1],
+                    onTap: () => setState(() => cycleController.text = cyclePresets[1]),
+                  ),
                 ),
               ],
             ),
-            
-            SizedBox(height: 15),
-            
+            const SizedBox(height: 15),
             Row(
               children: [
                 Expanded(
-                  child: _buildCycleButton(28),
+                  child: ChoiceButton<String>(
+                    value: cyclePresets[2],
+                    label: "${cyclePresets[2]}일",                 // 화면 표시용
+                    isSelected: cycleController.text.trim() == cyclePresets[2],
+                    onTap: () => setState(() => cycleController.text = cyclePresets[2]),
+                  ),
                 ),
-                SizedBox(width: 15),
+                const SizedBox(width: 15),
                 Expanded(
-                  child: _buildCycleButton(30),
+                  child: ChoiceButton<String>(
+                    value: cyclePresets[3],
+                    label: "${cyclePresets[3]}일",                 // 화면 표시용
+                    isSelected: cycleController.text.trim() == cyclePresets[3],
+                    onTap: () => setState(() => cycleController.text = cyclePresets[3]),
+                  ),
                 ),
               ],
             ),
             
-            SizedBox(height: 15),
+            const SizedBox(height: 15),
             
-            // 직접 입력
-            Container(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () {
-                  // 직접 입력 다이얼로그
-                  _showCustomInputDialog();
-                },
-                style: OutlinedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  side: BorderSide(color: Colors.grey[300]!),
+            // 입력 필드
+            TextField(
+              controller: cycleController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly], //숫자만
+              decoration: InputDecoration(
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: ColorTheme.mainColor, width: 2),
                 ),
-                child: Text(
-                  '직접 입력',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.black87,
-                  ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: ColorTheme.subColor, width: 2),
+                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                suffixText: "일",
+              ),
+              onChanged: (value) {
+                setState(() {});
+              },
+            ),
+
+            const SizedBox(height: 8),
+            
+
+            // 밑줄(입력) 아래 텍스트
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '직접 입력',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: ColorTheme.textLightGray,
                 ),
               ),
             ),
-            
+
             Spacer(),
             
             // 다음 버튼
-            Container(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pushNamed(context, '/input_days'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFFFF85B4),
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
+            ConfirmButton(
+              text: '다음',
+              isEnabled: cycleController.text.trim().isNotEmpty,
+              onPressed: () => Navigator.pushNamed(
+                  context, '/input_days',
+                  arguments: {
+                    'recentStartDate' : recentStartDate,
+                  }
                 ),
-                child: Text(
-                  '다음',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
             ),
             
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
           ],
         ),
-      ),
-    );
-  }
-  
-  Widget _buildCycleButton(int days) {
-    bool isSelected = selectedCycle == days;
-    
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedCycle = days;
-        });
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: isSelected ? Color(0xFFFF85B4) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? Color(0xFFFF85B4) : Colors.grey[300]!,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            '${days}일',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: isSelected ? Colors.white : Colors.black87,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-  
-  void _showCustomInputDialog() {
-    TextEditingController controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('직접 입력'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            hintText: '일수를 입력하세요',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (controller.text.isNotEmpty) {
-                setState(() {
-                  selectedCycle = int.parse(controller.text);
-                });
-              }
-              Navigator.pop(context);
-            },
-            child: Text('확인'),
-          ),
-        ],
       ),
     );
   }
