@@ -115,6 +115,7 @@ class _PeriodWidgetState extends State<PeriodWidget> {
         ),
 
         // 데모용 토글 버튼
+        /*
         if (widget.showDemoToggle) ...[
           const SizedBox(height: 10),
           OutlinedButton.icon(
@@ -131,6 +132,7 @@ class _PeriodWidgetState extends State<PeriodWidget> {
             ),
           ),
         ],
+        */
 
         const SizedBox(height: 14),
 
