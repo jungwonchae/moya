@@ -93,7 +93,7 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: nameController.text.isNotEmpty 
                     ? Color(0xFFFF85B4) 
-                    : Colors.grey[300],
+                    : Colors.white,
                   padding: EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -105,7 +105,7 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: Color(0xFFFF85B4),
                   ),
                 ),
               ),
