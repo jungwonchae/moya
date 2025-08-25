@@ -4,6 +4,10 @@ import 'package:moya_app/themes/colortheme.dart';  // mainColor 가져오기
 import 'package:moya_app/widgets/confirm_button.dart';
 import 'package:moya_app/widgets/choice_button.dart';
 
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:moya_app/services/period_service.dart';
+
 class InputPeriodCycleScreen extends StatefulWidget {
   @override
   _InputPeriodCycleScreenState createState() => _InputPeriodCycleScreenState();
@@ -12,7 +16,62 @@ class InputPeriodCycleScreen extends StatefulWidget {
 class _InputPeriodCycleScreenState extends State<InputPeriodCycleScreen> {
   TextEditingController cycleController = TextEditingController();
 
+  final PeriodService _service = PeriodService();
+  bool _saving = false;
+
   final List<String> cyclePresets = ["20", "25", "28", "30"];
+
+  Future<void> _onNext() async {
+  if (_saving) return;
+
+  final cycle = int.tryParse(cycleController.text.trim());
+  if (cycle == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('숫자를 입력해 주세요.'), backgroundColor: Colors.red),
+    );
+    return;
+  }
+
+  // 이전 화면에서 값 받기
+  final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
+  final recentStartDate = args['recentStartDate'] as DateTime?;
+  final userId = args['userId'] as String?;
+  final periodId = args['periodId'] as String?;
+
+  if (userId == null || userId.isEmpty || periodId == null || periodId.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('세션 정보가 없습니다. 처음부터 다시 시도해 주세요.'), backgroundColor: Colors.red),
+    );
+    print('[CycleScreen] missing userId/periodId. args=$args');
+    return;
+  }
+
+  setState(() => _saving = true);
+  try {
+    await _service.updatePeriodData(periodId, {
+      'cycleLength': cycle,
+    });
+    print('[CycleScreen] cycleLength saved: $cycle for periodId=$periodId');
+
+    Navigator.pushNamed(
+      context,
+      '/input_days',
+      arguments: {
+        'userId': userId,
+        'periodId': periodId,
+        'recentStartDate': recentStartDate,
+        'cycleLength': cycle,
+      },
+    );
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('저장 실패. 다시 시도해 주세요.'), backgroundColor: Colors.red),
+    );
+    print('[CycleScreen] error: $e');
+  } finally {
+    if (mounted) setState(() => _saving = false);
+  }
+}
   
   @override
   Widget build(BuildContext context) {
@@ -156,15 +215,9 @@ class _InputPeriodCycleScreenState extends State<InputPeriodCycleScreen> {
             // 다음 버튼
             ConfirmButton(
               text: '다음',
-              isEnabled: cycleController.text.trim().isNotEmpty,
-              onPressed: () => Navigator.pushNamed(
-                  context, '/input_days',
-                  arguments: {
-                    'recentStartDate' : recentStartDate,
-                  }
-                ),
+              isEnabled: cycleController.text.trim().isNotEmpty && !_saving,
+              onPressed: _saving ? null : _onNext,
             ),
-            
             const SizedBox(height: 20),
           ],
         ),
