@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';   // provider import
+import 'providers/bluetooth_provider.dart';  //만든 provider import
+
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/ondevice/ondevice_screen.dart';
@@ -24,7 +27,15 @@ import 'screens/usage/usage_second_screen.dart';
 import 'screens/usage/usage_third_screen.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(
+    MultiProvider(   // Provider들을 묶어서 주입
+      providers: [
+        ChangeNotifierProvider(create: (_) => BluetoothProvider()),
+        // 앞으로 다른 Provider 추가할 때 여기에등록 
+      ],
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -33,7 +44,13 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'MOYA',
       theme: ThemeData(
+<<<<<<< Updated upstream
         primaryColor: Color(0xFFFF85B4), // 새로운 색상
+=======
+        useMaterial3: true,
+        fontFamily: 'Pretendard',
+        primaryColor: const Color(0xFFFF85B4),
+>>>>>>> Stashed changes
         colorScheme: ColorScheme.fromSeed(
           seedColor: Color(0xFFFF85B4), // 새로운 색상
         ),
@@ -62,9 +79,7 @@ class MyApp extends StatelessWidget {
         '/setting_period': (context) => InputPeriodSettingScreen(),
         '/setting_bluetooth': (context) => InputBleSettingScreen(),
 
-        
         '/usage_guide': (context) => UsageFirstScreen(),
-
         '/usage_first': (context) => UsageFirstScreen(),
         '/usage_second': (context) => UsageSecondScreen(), 
         '/usage_third': (context) => UsageThirdScreen(),
