@@ -4,6 +4,9 @@ import 'package:moya_app/themes/colortheme.dart';  // mainColor 가져오기
 import 'package:moya_app/widgets/confirm_button.dart';
 import 'package:moya_app/widgets/choice_button.dart';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:moya_app/services/period_service.dart';
+
 class InputPeriodDaysScreen extends StatefulWidget {
   @override
   _InputPeriodDaysScreenState createState() => _InputPeriodDaysScreenState();
@@ -11,8 +14,74 @@ class InputPeriodDaysScreen extends StatefulWidget {
 
 class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
   TextEditingController dayController = TextEditingController();
+  final PeriodService _service = PeriodService();
+  bool _saving = false;
 
   final List<String> dayPresets = ["3", "4", "5", "6"];
+
+  Future<void> _onNext() async {
+    if (_saving) return;
+
+    final daysText = dayController.text.trim();
+    final days = int.tryParse(daysText);
+    if (days == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('숫자를 입력해 주세요.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
+    final recentStartDate = args['recentStartDate'] as DateTime?;
+    final userId = args['userId'] as String?;
+    final periodId = args['periodId'] as String?;
+    final cycleLength = args['cycleLength']; // 다음 화면에 넘길 용도(있으면)
+
+    if (userId == null || userId.isEmpty || periodId == null || periodId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('세션 정보가 없습니다. 처음부터 다시 시도해 주세요.'), backgroundColor: Colors.red),
+      );
+      // ignore: avoid_print
+      print('[DaysScreen] missing userId/periodId. args=$args');
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() => _saving = true);
+    try {
+      await _service.updatePeriodData(periodId, {
+        'periodLength': days,
+      });
+      // ignore: avoid_print
+      print('[DaysScreen] periodLength saved: $days for periodId=$periodId');
+
+      Navigator.pushNamed(
+        context,
+        '/input_extra',
+        arguments: {
+          'userId': userId,
+          'periodId': periodId,
+          'recentStartDate': recentStartDate,
+          'cycleLength': cycleLength,
+          'periodLength': days,
+        },
+      );
+    } on FirebaseException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('저장 실패: ${e.message ?? e.code}'), backgroundColor: Colors.red),
+      );
+      // ignore: avoid_print
+      print('[DaysScreen] FirebaseException: ${e.code} ${e.message}');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('저장에 실패했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
+      );
+      // ignore: avoid_print
+      print('[DaysScreen] Unknown error: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -155,17 +224,12 @@ class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
             
             // 다음 버튼
             ConfirmButton(
-              text: '다음',
-              isEnabled: dayController.text.trim().isNotEmpty,
-              onPressed: () => Navigator.pushNamed(
-                context, '/input_extra',
-                arguments: {
-                      'recentStartDate' : recentStartDate,
-                }
-              ),
+              text: '다음',                            // 항상 '다음'
+              isEnabled: dayController.text.trim().isNotEmpty && !_saving,
+              onPressed: _saving ? null : _onNext,   // 중복 클릭 방지
             ),
-            
-            SizedBox(height: 20),
+
+            const SizedBox(height: 20),
           ],
         ),
       ),

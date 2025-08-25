@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:moya_app/themes/colortheme.dart';  // mainColor 가져오기
 import 'package:moya_app/widgets/confirm_button.dart';
 import 'package:moya_app/widgets/choice_button.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:moya_app/services/period_service.dart';
+
 
 
 class InputInfoNickScreen extends StatefulWidget {
@@ -11,11 +14,85 @@ class InputInfoNickScreen extends StatefulWidget {
 
 class _InputInfoNickScreenState extends State<InputInfoNickScreen> {
   TextEditingController nickController = TextEditingController();
+  final PeriodService _periodService = PeriodService(); // Provider 없어도 OK
+  bool _saving = false;
 
   final List<String> nickPresets = ["모야예요!", "교체하세요.", "모야모야?!", "교체 알림!"];
   
+  Future<void> _onNext() async {
+    final nick = nickController.text.trim();
+    if (nick.isEmpty || _saving) return;
+
+    // 이전 화면에서 userId 받아오기
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final userId = (args?['userId'] as String?) ?? '';
+
+    if (userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('사용자 정보를 찾을 수 없어요. 다시 시도해 주세요.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      // 디버그 로그
+      // ignore: avoid_print
+      print('[NickScreen] Missing userId in route arguments: $args');
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      final periodId = await _periodService.createDraftWithNick(
+        userId: userId,
+        nick: nick,
+      );
+
+      // 디버그 로그
+      // ignore: avoid_print
+      print('[NickScreen] Saved nick draft. periodId=$periodId userId=$userId nick=$nick');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('알림 문구가 저장되었어요'),
+          backgroundColor: ColorTheme.subColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+
+      Navigator.pushNamed(
+        context,
+        '/input_recent',
+        arguments: {
+          'userId': userId,
+          'periodId': periodId,
+          'nick': nick,
+        },
+      );
+    } on FirebaseException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('저장 실패: ${e.message ?? e.code}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      // ignore: avoid_print
+      print('[NickScreen] FirebaseException: ${e.code} ${e.message}');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: const Text('저장에 실패했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
+      );
+      // ignore: avoid_print
+      print('[NickScreen] Unknown error: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final canProceed = nickController.text.trim().isNotEmpty && !_saving;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -126,13 +203,10 @@ class _InputInfoNickScreenState extends State<InputInfoNickScreen> {
                 ),
                 contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               ),
-              onChanged: (value) {
-                setState(() {});
-              },
+              onChanged: (_) => setState(() {}),
             ),
 
             SizedBox(height: 8),
-            
 
             // 밑줄(입력) 아래 텍스트
             Align(
@@ -151,8 +225,8 @@ class _InputInfoNickScreenState extends State<InputInfoNickScreen> {
             // 다음 버튼
             ConfirmButton(
               text: '다음',
-              isEnabled: nickController.text.trim().isNotEmpty,
-              onPressed: () => Navigator.pushNamed(context, '/input_recent'),
+              isEnabled: canProceed,
+              onPressed: _saving ? null : _onNext,
             ),
             
             SizedBox(height: 20),

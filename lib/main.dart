@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';   // provider import
+import 'package:firebase_core/firebase_core.dart';
 import 'providers/bluetooth_provider.dart';  //만든 provider import
+
+import 'firebase_options.dart';
 
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
@@ -24,14 +27,26 @@ import 'screens/input_ble/input_ble_initial_screen.dart';
 import 'screens/input_ble/input_ble_setting_screen.dart';
 import 'screens/usage/usage_screens_container.dart';
 import 'screens/usage/usage_screens_container.dart';
-void main() {
+
+import 'services/user_service.dart';
+import 'services/period_service.dart';
+
+
+Future<void> main() async {
+  // ✅ Firebase 초기화 준비
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   runApp(
-    MultiProvider(   // Provider들을 묶어서 주입
+    MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => BluetoothProvider()),
-        // 앞으로 다른 Provider 추가할 때 여기에등록 
+        Provider<UserService>(create: (_) => UserService()),
+        Provider<PeriodService>(create: (_) => PeriodService()),
       ],
-      child: MyApp(),
+      child: MyApp(),   // const 붙여주면 좋음
     ),
   );
 }

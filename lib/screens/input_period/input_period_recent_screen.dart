@@ -4,12 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:moya_app/themes/colortheme.dart';
 import 'package:moya_app/widgets/confirm_button.dart';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:moya_app/services/period_service.dart';
+
 class InputPeriodRecentScreen extends StatefulWidget {
   @override
   _InputPeriodRecentScreenState createState() => _InputPeriodRecentScreenState();
 }
 
 class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
+  final _service = PeriodService();
+  bool _saving = false;
+
   DateTime selectedDate = DateTime.now().subtract(const Duration(days: 7));
 
   // 날짜 함수
@@ -105,6 +111,73 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
     },
   );
 }
+Future<void> _onNext() async {
+    if (_saving) return;
+    FocusScope.of(context).unfocus();
+
+    // 닉 화면에서 넘겨준 값 받기
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    final userId   = (args?['userId'] as String?) ?? '';
+    String? periodId = args?['periodId'] as String?;
+    final nick     = args?['nick'] as String?;
+
+    if (userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사용자 정보를 찾을 수 없어요.'), backgroundColor: Colors.red),
+      );
+      // 디버그
+      // ignore: avoid_print
+      print('[RecentScreen] missing userId. args=$args');
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      if (periodId == null || periodId.isEmpty) {
+        // 혹시 드래프트가 없으면 즉시 생성
+        periodId = await _service.createDraftWithNick(
+          userId: userId,
+          nick: (nick ?? '알림'),
+        );
+        // ignore: avoid_print
+        print('[RecentScreen] draft created on the fly: $periodId');
+      }
+
+      // startDate만 업데이트
+      await _service.updatePeriodData(periodId, {
+        'startDate': selectedDate,
+      });
+      // ignore: avoid_print
+      print('[RecentScreen] startDate saved for $periodId : $selectedDate');
+
+      // 다음 화면으로 이동 (기존처럼 recentStartDate도 넘겨둠)
+      Navigator.pushNamed(
+        context,
+        '/input_cycle',
+        arguments: {
+          'userId': userId,
+          'periodId': periodId,
+          'nick': nick,
+          'recentStartDate': selectedDate,
+        },
+      );
+    } on FirebaseException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('저장 실패: ${e.message ?? e.code}'), backgroundColor: Colors.red),
+      );
+      // ignore: avoid_print
+      print('[RecentScreen] FirebaseException: ${e.code} ${e.message}');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('저장에 실패했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
+      );
+      // ignore: avoid_print
+      print('[RecentScreen] Unknown error: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -194,13 +267,8 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
 
             ConfirmButton(
               text: '다음',
-              isEnabled: true,
-              onPressed: () => Navigator.pushNamed(
-                  context, '/input_cycle',
-                  arguments: {
-                    'recentStartDate' : selectedDate,
-                  }
-                ),
+              isEnabled: !_saving, // 저장 중에는 비활성화로 중복 방지
+              onPressed: _saving ? null : _onNext,
             ),
             const SizedBox(height: 20),
           ],
