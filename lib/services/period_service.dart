@@ -4,7 +4,10 @@ class PeriodService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   CollectionReference get _col => _firestore.collection('periods');
 
-  // 생리 정보를 periods 컬렉션에 저장
+  /// 날짜만 유지(시간 00:00:00)로 정규화
+  DateTime _normalizeDate(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  // 생리 정보를 periods 컬렉션에 저장 (기존 메서드)
   Future<String?> savePeriodData({
     required String userId,
     required DateTime startDate,
@@ -16,20 +19,24 @@ class PeriodService {
     String? nick,
   }) async {
     try {
-      // periods 컬렉션에 새 문서 생성
-      DocumentReference periodDoc = await _firestore.collection('periods').add({
-        'userId': userId, // 어떤 사용자의 기록인지
-        'startDate': Timestamp.fromDate(startDate),
-        'endDate': endDate != null ? Timestamp.fromDate(endDate) : null,
-        'cycleLength': cycleLength ?? 28, // 기본값 28일
-        'periodLength': periodLength ?? 5, // 기본값 5일
+      final normalizedStart = _normalizeDate(startDate);
+
+      // 기존처럼 랜덤 문서ID로 추가(현재 구조 유지)
+      DocumentReference periodDoc = await _col.add({
+        'userId': userId,
+        'startDate': Timestamp.fromDate(normalizedStart), // ✅ 정규화해서 저장
+        'endDate': endDate != null ? Timestamp.fromDate(_normalizeDate(endDate)) : null,
+        'cycleLength': cycleLength ?? 28,
+        'periodLength': periodLength ?? 5,
         'isOnMedication': isOnMedication ?? false,
         'flow': flow ?? '보통',
         if (nick != null && nick.trim().isNotEmpty) 'nick': nick.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       print('생리 정보 저장 성공! Period ID: ${periodDoc.id}');
-      return periodDoc.id; // 생성된 period 문서 ID 반환
+      return periodDoc.id;
 
     } catch (e) {
       print('생리 정보 저장 실패: $e');
@@ -37,7 +44,57 @@ class PeriodService {
     }
   }
 
-  /// 닉네임만 먼저 저장하는 드래프트 생성
+  /// 추가 화면용: recentStartDate(= startDate) 기준으로 upsert
+  /// - 문서가 있으면 endDate / isOnMedication 등 업데이트
+  /// - 없으면 최소 필드로 새로 생성
+  Future<String> upsertExtraByStartDate({
+    required String userId,
+    required DateTime recentStartDate,   // 시작일
+    required DateTime selectedEndDate,   // 종료일
+    bool? isOnMedication,
+  }) async {
+    try {
+      final start = _normalizeDate(recentStartDate);
+      final end = _normalizeDate(selectedEndDate);
+
+      // 동일 유저 + 동일 startDate 문서 있는지 조회 (정확히 같은 Timestamp여야 하므로 정규화 중요)
+      final qs = await _col
+          .where('userId', isEqualTo: userId)
+          .where('startDate', isEqualTo: Timestamp.fromDate(start))
+          .limit(1)
+          .get();
+
+      if (qs.docs.isNotEmpty) {
+        // ✅ 이미 있으면 업데이트
+        final doc = qs.docs.first.reference;
+        await doc.set({
+          'endDate': Timestamp.fromDate(end),
+          'isOnMedication': isOnMedication,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        return doc.id;
+      } else {
+        // ✅ 없으면 새로 생성 (최소 필드)
+        final doc = await _col.add({
+          'userId': userId,
+          'startDate': Timestamp.fromDate(start),
+          'endDate': Timestamp.fromDate(end),
+          'isOnMedication': isOnMedication,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        return doc.id;
+      }
+    } on FirebaseException catch (e) {
+      print('[PeriodService] Firestore error: ${e.code} ${e.message}');
+      rethrow;
+    } catch (e) {
+      print('[PeriodService] unknown error: $e');
+      rethrow;
+    }
+  }
+
+  /// 닉네임만 먼저 저장하는 드래프트 생성 (기존 유지)
   Future<String> createDraftWithNick({
     required String userId,
     required String nick,
@@ -46,32 +103,25 @@ class PeriodService {
       final data = {
         'userId': userId,
         'nick': nick.trim(),
-        // 나중 단계에서 채움
-        // 'startDate','endDate','cycleLength','periodLength','flow','isOnMedication'
         'createdAt': FieldValue.serverTimestamp(),
       };
 
       final doc = await _col.add(data);
-      // 디버그용 로그
-      // ignore: avoid_print
       print('[PeriodService] draft created: ${doc.id} for user=$userId nick=$nick');
       return doc.id;
     } on FirebaseException catch (e) {
-      // ignore: avoid_print
       print('[PeriodService] Firestore error: ${e.code} ${e.message}');
       rethrow;
     } catch (e) {
-      // ignore: avoid_print
       print('[PeriodService] unknown error: $e');
       rethrow;
     }
   }
 
-  // 특정 사용자의 최근 생리 기록 가져오기
+  // 특정 사용자의 최근 생리 기록 가져오기 (기존)
   Future<Map<String, dynamic>?> getLatestPeriod(String userId) async {
     try {
-      QuerySnapshot snapshot = await _firestore
-          .collection('periods')
+      QuerySnapshot snapshot = await _col
           .where('userId', isEqualTo: userId)
           .orderBy('startDate', descending: true)
           .limit(1)
@@ -91,18 +141,20 @@ class PeriodService {
     }
   }
 
-  // 특정 기간의 생리 기록들 가져오기
+  // 특정 기간의 생리 기록들 가져오기 (기존)
   Future<List<Map<String, dynamic>>> getPeriodsInRange(
     String userId, 
     DateTime startDate, 
     DateTime endDate
   ) async {
     try {
-      QuerySnapshot snapshot = await _firestore
-          .collection('periods')
+      final s = _normalizeDate(startDate);
+      final e = _normalizeDate(endDate);
+
+      QuerySnapshot snapshot = await _col
           .where('userId', isEqualTo: userId)
-          .where('startDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
-          .where('startDate', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+          .where('startDate', isGreaterThanOrEqualTo: Timestamp.fromDate(s))
+          .where('startDate', isLessThanOrEqualTo: Timestamp.fromDate(e))
           .orderBy('startDate', descending: true)
           .get();
 
@@ -118,10 +170,10 @@ class PeriodService {
     }
   }
 
-  // 생리 정보 업데이트
+  // 생리 정보 업데이트 (기존)
   Future<bool> updatePeriodData(String periodId, Map<String, dynamic> data) async {
     try {
-      await _firestore.collection('periods').doc(periodId).update({
+      await _col.doc(periodId).update({
         ...data,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -130,37 +182,6 @@ class PeriodService {
     } catch (e) {
       print('생리 정보 업데이트 실패: $e');
       return false;
-    }
-  }
-}
-
-// 사용 예시
-class ExampleUsage {
-  final PeriodService _periodService = PeriodService();
-
-  // 생리 정보 저장 예시
-  void savePeriodExample(String userId) async {
-    String? periodId = await _periodService.savePeriodData(
-      userId: userId,
-      startDate: DateTime.now(),
-      endDate: DateTime.now().add(Duration(days: 5)),
-      cycleLength: 28,
-      periodLength: 5,
-      isOnMedication: false,
-      flow: '보통',
-    );
-
-    if (periodId != null) {
-      print('저장 성공! Period ID: $periodId');
-    }
-  }
-
-  // 최근 생리 기록 조회 예시
-  void getLatestPeriodExample(String userId) async {
-    var latestPeriod = await _periodService.getLatestPeriod(userId);
-    if (latestPeriod != null) {
-      print('최근 생리 시작일: ${latestPeriod['startDate']}');
-      print('생리 기간: ${latestPeriod['periodLength']}일');
     }
   }
 }
