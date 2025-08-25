@@ -5,6 +5,7 @@ import 'package:moya_app/themes/colortheme.dart';
 import 'package:moya_app/widgets/confirm_button.dart';
 import 'package:moya_app/widgets/choice_button.dart';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:moya_app/services/period_service.dart';
 
 class InputPeriodExtraScreen extends StatefulWidget {
@@ -50,7 +51,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
       final picked = await showDatePicker(
         context: context,
         initialDate: selectedDate,
-        firstDate: recentStartDate!.add(const Duration(days: 1)), // 시작 다음날부터
+        firstDate: recentStartDate!,
         lastDate: DateTime(2035),
         helpText: '날짜 선택',
       );
@@ -63,7 +64,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
     if (recentStartDate == null) return;
     
     DateTime temp = selectedDate;
-    final min = recentStartDate!.add(const Duration(days: 1)); // 시작 다음날부터
+    final min = recentStartDate!;
     final max = DateTime.now().add(const Duration(days: 365));
 
     showCupertinoModalPopup(
@@ -135,38 +136,41 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
   setState(() => _saving = true);
 
   try {
-    // PeriodService: userId + startDate(정규화)로 기존 문서 찾고, 있으면 업데이트/없으면 생성
-      await _service.upsertExtraByStartDate(
-        userId: userId!,
-        recentStartDate: recentStartDate!,
-        selectedEndDate: selectedDate,
-        isOnMedication: isOnMedication,
+    await PeriodService().upsertExtraByStartDate(
+      userId: userId!,
+      recentStartDate: recentStartDate!,
+      selectedEndDate: selectedDate,
+      isOnMedication: isOnMedication,
     );
 
-    if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text('생리 정보가 저장되었습니다!'), backgroundColor: ColorTheme.subColor),
-      );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('생리 정보가 저장되었습니다!'),
+        backgroundColor: ColorTheme.subColor,
+      ),
+    );
 
-      Navigator.pushNamed(
-        context,
-        '/input_ble',
-        arguments: {
-          'userId': userId,
-          'recentStartDate': recentStartDate,
-          'selectedEndDate': selectedDate,
-          'isOnMedication': isOnMedication,
-        },
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('저장 실패: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    Navigator.pushNamed(
+      context,
+      '/input_ble',
+      arguments: {
+        'userId': userId,
+        'recentStartDate': recentStartDate,
+        'selectedEndDate': selectedDate,
+        'isOnMedication': isOnMedication,
+      },
+    );
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('저장 실패: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  } finally {
+    if (mounted) setState(() => _saving = false);
   }
+}
   
   @override
   Widget build(BuildContext context) {
@@ -356,13 +360,21 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
             ConfirmButton(
               text: '다음',
               isEnabled: !_saving && recentStartDate != null && userId != null,
-              onPressed: _saving ? null : _savePeriodToFirebase,
+              onPressed: _saving ? () {} : _savePeriodToFirebase,
             ),
 
             Center(
               child: TextButton(
-                onPressed: _saving ? null : () => Navigator.pushNamed(context, '/input_ble'),
-                child: Text('건너뛰기', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                onPressed: _saving
+                    ? null
+                    : () => Navigator.pushNamed(context, '/input_ble'),
+                child: Text(
+                  '건너뛰기',
+                  style: TextStyle(
+                    fontSize: 14, 
+                    color: Colors.grey[600],
+                  ),
+                ),
               ),
             ),
             
