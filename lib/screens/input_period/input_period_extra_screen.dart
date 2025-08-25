@@ -5,7 +5,7 @@ import 'package:moya_app/themes/colortheme.dart';
 import 'package:moya_app/widgets/confirm_button.dart';
 import 'package:moya_app/widgets/choice_button.dart';
 
-
+import 'package:moya_app/services/period_service.dart';
 
 class InputPeriodExtraScreen extends StatefulWidget {
   @override
@@ -14,9 +14,12 @@ class InputPeriodExtraScreen extends StatefulWidget {
 
 class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
   bool? isOnMedication;
-  TextEditingController endDateController = TextEditingController();
   DateTime selectedDate = DateTime.now().subtract(const Duration(days: 7));
-  DateTime? recentStartDate; // 추가: 이전 페이지에서 받아온 생리 시작일
+  DateTime? recentStartDate;
+  String? userId;
+  
+  final PeriodService _service = PeriodService();
+  bool _saving = false;
 
   @override
   void didChangeDependencies() {
@@ -24,10 +27,11 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
     // 이전 페이지에서 전달받은 데이터 가져오기
     final args = (ModalRoute.of(context)!.settings.arguments as Map?) ?? {};
     recentStartDate = args['recentStartDate'] as DateTime?;
+    userId = args['userId'] as String?;
     
     // 만약 selectedDate가 recentStartDate보다 이전이면 조정
     if (recentStartDate != null && selectedDate.isBefore(recentStartDate!)) {
-      selectedDate = recentStartDate!.add(const Duration(days: 1)); // 시작일 다음날로 설정
+      selectedDate = recentStartDate!.add(const Duration(days: 1));
     }
   }
 
@@ -36,9 +40,9 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
     return "${d.year}년 ${d.month}월 ${d.day}일";
   }
   
-  // 플랫폼별 날짜 선택 (iOS: CupertinoDatePicker, Android: showDatePicker)
+  // 플랫폼별 날짜 선택
   Future<void> _pickDateAdaptive() async {
-    if (recentStartDate == null) return; // 시작일이 없으면 선택 불가
+    if (recentStartDate == null) return;
     
     if (Platform.isIOS) {
       _showCupertinoDatePicker();
@@ -46,7 +50,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
       final picked = await showDatePicker(
         context: context,
         initialDate: selectedDate,
-        firstDate: recentStartDate!, // 생리 시작일 이후만 선택 가능
+        firstDate: recentStartDate!.add(const Duration(days: 1)), // 시작 다음날부터
         lastDate: DateTime(2035),
         helpText: '날짜 선택',
       );
@@ -54,12 +58,12 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
     } 
   }
 
-  // ✅ iOS 스타일 모달 피커
+  // iOS 스타일 모달 피커
   void _showCupertinoDatePicker() {
-    if (recentStartDate == null) return; // 시작일이 없으면 선택 불가
+    if (recentStartDate == null) return;
     
     DateTime temp = selectedDate;
-    final min = recentStartDate!; // 생리 시작일을 최소 날짜로 설정
+    final min = recentStartDate!.add(const Duration(days: 1)); // 시작 다음날부터
     final max = DateTime.now().add(const Duration(days: 365));
 
     showCupertinoModalPopup(
@@ -68,9 +72,9 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
         return CupertinoTheme(
           data: CupertinoThemeData(
             brightness: Brightness.light,
-            primaryColor: ColorTheme.subColor, // 취소/완료 텍스트 색
+            primaryColor: ColorTheme.subColor,
           ),
-          child: CupertinoPopupSurface( // iOS 모달 표면 느낌
+          child: CupertinoPopupSurface(
             isSurfacePainted: true,
             child: Container(
               height: 320,
@@ -79,7 +83,6 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                 top: false,
                 child: Column(
                   children: [
-                    // 상단 액션 바 (iOS 스타일: 텍스트 버튼)
                     SizedBox(
                       height: 44,
                       child: Row(
@@ -105,18 +108,13 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                       ),
                     ),
                     const Divider(height: 1, thickness: 0.5),
-
-                    // 휠 피커
                     Expanded(
                       child: CupertinoDatePicker(
                         mode: CupertinoDatePickerMode.date,
                         initialDateTime: selectedDate,
                         minimumDate: min,
                         maximumDate: max,
-                        // 원하면 순서 고정
-                        // dateOrder: DatePickerDateOrder.ymd,
                         onDateTimeChanged: (d) => temp = d,
-                        // 배경 고정 (다크/라이트에 영향받지 않게)
                         backgroundColor: CupertinoColors.systemBackground,
                       ),
                     ),
@@ -128,6 +126,46 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
         );
       },
     );
+  }
+
+  // Firebase에 생리 정보 저장
+  Future<void> _savePeriodToFirebase() async {
+  if (_saving || recentStartDate == null || userId == null) return;
+
+  setState(() => _saving = true);
+
+  try {
+    // PeriodService: userId + startDate(정규화)로 기존 문서 찾고, 있으면 업데이트/없으면 생성
+      await _service.upsertExtraByStartDate(
+        userId: userId!,
+        recentStartDate: recentStartDate!,
+        selectedEndDate: selectedDate,
+        isOnMedication: isOnMedication,
+    );
+
+    if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: const Text('생리 정보가 저장되었습니다!'), backgroundColor: ColorTheme.subColor),
+      );
+
+      Navigator.pushNamed(
+        context,
+        '/input_ble',
+        arguments: {
+          'userId': userId,
+          'recentStartDate': recentStartDate,
+          'selectedEndDate': selectedDate,
+          'isOnMedication': isOnMedication,
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('저장 실패: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
   
   @override
@@ -147,7 +185,6 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 단계 표시
             Text(
               '(선택) 추가 질문',
               style: TextStyle(
@@ -159,7 +196,6 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
             
             SizedBox(height: 20),
             
-            // 제목
             Text(
               '더 정확한 예측을\n위해 알려주세요',
               textAlign: TextAlign.center,
@@ -172,11 +208,9 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
             
             SizedBox(height: 40),
             
-            // 최근 생리 종료일
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // 점 (Circle)
                 Container(
                   width: 6,
                   height: 6,
@@ -186,8 +220,6 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                     shape: BoxShape.circle,
                   ),
                 ),
-
-                // 텍스트
                 Expanded(
                   child: Text(
                     '최근 생리 종료일 (몰라도 괜찮아요)',
@@ -200,7 +232,8 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
               ],
             ),
             
-            // 안내 메시지 추가
+            SizedBox(height: 15),
+            
             if (recentStartDate != null)
               Container(
                 width: double.infinity,
@@ -216,7 +249,6 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                 ),
               ),
             
-            // 날짜 표시 + 탭하여 피커 열기
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -230,7 +262,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
               child: Column(
                 children: [
                   GestureDetector(
-                    onTap: recentStartDate != null ? _pickDateAdaptive : null, // 시작일이 있을 때만 선택 가능
+                    onTap: recentStartDate != null ? _pickDateAdaptive : null,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       decoration: BoxDecoration(
@@ -242,7 +274,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                         style: TextStyle(
                           fontSize: 18, 
                           fontWeight: FontWeight.w600,
-                          color: recentStartDate != null ? Colors.black : Colors.grey, // 비활성화 시 회색
+                          color: recentStartDate != null ? Colors.black : Colors.grey,
                         ),
                       ),
                     ),
@@ -261,7 +293,6 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
             
             SizedBox(height: 40),
             
-            // 피임약/호르몬 치료 질문
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -288,7 +319,6 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
 
             SizedBox(height: 20),
             
-            // 네/아니오 버튼 - ChoiceButton 사용
             Row(
               children: [
                 Expanded(
@@ -298,7 +328,6 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                     isSelected: isOnMedication == true,
                     onTap: () {
                       setState(() {
-                        // 이미 '네' 선택 상태라면 해제(null), 아니면 true로 선택
                         isOnMedication = (isOnMedication == true) ? null : true;
                       });
                     },
@@ -312,7 +341,6 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                     isSelected: isOnMedication == false,
                     onTap: () {
                       setState(() {
-                        // 이미 '아니오' 선택 상태라면 해제(null), 아니면 false로 선택
                         isOnMedication = (isOnMedication == false) ? null : false;
                       });
                     },
@@ -325,36 +353,16 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
             
             Spacer(),
 
-            // 다음 버튼
             ConfirmButton(
               text: '다음',
-              isEnabled: true,
-              onPressed: () {
-                // 다음 페이지로 데이터 전달
-                Navigator.pushNamed(
-                  context, 
-                  '/input_ble',
-                  arguments: {
-                    'recentStartDate': recentStartDate,
-                    'selectedEndDate': selectedDate,
-                    'isOnMedication': isOnMedication,
-                  },
-                );
-              },
+              isEnabled: !_saving && recentStartDate != null && userId != null,
+              onPressed: _saving ? null : _savePeriodToFirebase,
             ),
-    
-            // 건너뛰기 버튼
+
             Center(
               child: TextButton(
-                onPressed: () => Navigator.pushNamed(context, '/input_ble'),
-                child: Text(
-                  '건너뛰기',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: ColorTheme.textGray,
-                    //decoration: TextDecoration.underline,
-                  ),
-                ),
+                onPressed: _saving ? null : () => Navigator.pushNamed(context, '/input_ble'),
+                child: Text('건너뛰기', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
               ),
             ),
             
