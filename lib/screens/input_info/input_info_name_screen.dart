@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:moya_app/themes/colortheme.dart';  // mainColor 가져오기
 
 class InputInfoNameScreen extends StatefulWidget {
   @override
@@ -23,15 +24,15 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
       body: Padding(
         padding: EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // 단계 표시
             Text(
-              '기본 정보',
+              '이름 입력',
               style: TextStyle(
                 fontSize: 14,
-                color: Color(0xFFFF85B4),
-                fontWeight: FontWeight.w500,
+                color: ColorTheme.subColor,
+                fontWeight: FontWeight.w600,
               ),
             ),
             
@@ -43,7 +44,7 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.black,
+                color: ColorTheme.textBlack,
               ),
             ),
             
@@ -54,7 +55,7 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
               '별명을 입력해도 돼요!',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: ColorTheme.textGray,
               ),
             ),
             
@@ -64,15 +65,11 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
             TextField(
               controller: nameController,
               decoration: InputDecoration(
-                hintText: 'ex) 홍길동',
-                hintStyle: TextStyle(color: Colors.grey[400]),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: ColorTheme.mainColor, width: 2),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Color(0xFFFF85B4)),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: ColorTheme.subColor, width: 2),
                 ),
                 contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               ),
@@ -80,7 +77,22 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
                 setState(() {});
               },
             ),
+
+            SizedBox(height: 8),
             
+
+            // 밑줄 아래 예시 텍스트
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'ex) 홍길동',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: ColorTheme.textLightGray,
+                ),
+              ),
+            ),
+
             Spacer(),
             
             // 다음 버튼
@@ -92,7 +104,7 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
                   : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: nameController.text.isNotEmpty 
-                    ? Color(0xFFFF85B4) 
+                    ? ColorTheme.subColor
                     : Colors.white,
                   padding: EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
