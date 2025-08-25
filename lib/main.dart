@@ -44,13 +44,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'MOYA',
       theme: ThemeData(
-<<<<<<< Updated upstream
-        primaryColor: Color(0xFFFF85B4), // 새로운 색상
-=======
         useMaterial3: true,
         fontFamily: 'Pretendard',
         primaryColor: const Color(0xFFFF85B4),
->>>>>>> Stashed changes
         colorScheme: ColorScheme.fromSeed(
           seedColor: Color(0xFFFF85B4), // 새로운 색상
         ),
