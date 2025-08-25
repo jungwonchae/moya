@@ -1,9 +1,5 @@
 # Uncomment this line to define a global platform for your project
-<<<<<<< HEAD
 platform :ios, '15.0'
-=======
-# platform :ios, '15.0'
->>>>>>> ec8a48f46579c2286de3ec90b18077e0b7d10ac4
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -42,6 +38,11 @@ end
 
 post_install do |installer|
   installer.pods_project.targets.each do |target|
+    # Flutter 기본 추가 설정
     flutter_additional_ios_build_settings(target)
+    # 🔒 모든 Pod의 배포 타깃을 15.0으로 강제
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    end
   end
 end
