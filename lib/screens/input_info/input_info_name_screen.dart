@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:moya_app/themes/colortheme.dart';  // mainColor 가져오기
+import 'package:moya_app/widgets/confirm_button.dart';
 
 class InputInfoNameScreen extends StatefulWidget {
   @override
@@ -96,31 +97,10 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
             Spacer(),
             
             // 다음 버튼
-            Container(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: nameController.text.isNotEmpty 
-                  ? () => Navigator.pushNamed(context, '/input_nick')
-                  : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: nameController.text.isNotEmpty 
-                    ? ColorTheme.subColor
-                    : Colors.white,
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  '다음',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFFFF85B4),
-                  ),
-                ),
-              ),
+            ConfirmButton(
+              text: '다음',
+              isEnabled: nameController.text.trim().isNotEmpty,
+              onPressed: () => Navigator.pushNamed(context, '/input_nick'),
             ),
             
             SizedBox(height: 20),
