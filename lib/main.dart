@@ -44,11 +44,27 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'MOYA',
       theme: ThemeData(
-        useMaterial3: true,
-        fontFamily: 'Pretendard',
+        useMaterial3: true,                  // 머티리얼3 활성화
+        fontFamily: 'Pretendard',            // pubspec.yaml에 등록한 폰트 패밀리 이름
         primaryColor: const Color(0xFFFF85B4),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Color(0xFFFF85B4), // 새로운 색상
+          seedColor: const Color(0xFFFF85B4),
+        ),
+        textTheme: const TextTheme(
+          displayLarge:  TextStyle(fontWeight: FontWeight.w700),
+          displayMedium: TextStyle(fontWeight: FontWeight.w700),
+          headlineLarge: TextStyle(fontWeight: FontWeight.w700),
+          headlineMedium:TextStyle(fontWeight: FontWeight.w600),
+          titleLarge:    TextStyle(fontWeight: FontWeight.w600),
+          titleMedium:   TextStyle(fontWeight: FontWeight.w600),
+
+          bodyLarge:  TextStyle(fontWeight: FontWeight.w400),
+          bodyMedium: TextStyle(fontWeight: FontWeight.w400),
+          bodySmall:  TextStyle(fontWeight: FontWeight.w400),
+
+          labelLarge:  TextStyle(fontWeight: FontWeight.w600),
+          labelMedium: TextStyle(fontWeight: FontWeight.w500),
+          labelSmall:  TextStyle(fontWeight: FontWeight.w500),
         ),
       ),
       home: LoginScreen(),
