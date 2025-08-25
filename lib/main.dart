@@ -23,6 +23,7 @@ import 'screens/input_period/input_period_setting_screen.dart';
 import 'screens/input_ble/input_ble_initial_screen.dart';
 import 'screens/input_ble/input_ble_setting_screen.dart';
 import 'screens/usage/usage_screens_container.dart';
+import 'screens/usage/usage_screens_container.dart';
 void main() {
   runApp(
     MultiProvider(   // Provider들을 묶어서 주입
@@ -87,16 +88,7 @@ class MyApp extends StatelessWidget {
         '/setting_nick': (context) => InputInfoNickScreen(),
         '/setting_period': (context) => InputPeriodSettingScreen(),
         '/setting_bluetooth': (context) => InputBleSettingScreen(),
-
-<<<<<<< Updated upstream
-        '/usage_guide': (context) => UsageFirstScreen(),
-        '/usage_first': (context) => UsageFirstScreen(),
-        '/usage_second': (context) => UsageSecondScreen(), 
-        '/usage_third': (context) => UsageThirdScreen(),
-=======
-        
         '/usage_container': (context) => UsageScreensContainer(),
->>>>>>> Stashed changes
       },
       debugShowCheckedModeBanner: false,
     );
