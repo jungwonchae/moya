@@ -6,6 +6,7 @@ import 'package:moya_app/widgets/confirm_button.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:moya_app/services/period_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp, FirebaseException;
 
 class InputPeriodRecentScreen extends StatefulWidget {
   @override
@@ -22,100 +23,223 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
   String formatKoreanDate(DateTime d) {
     return "${d.year}년 ${d.month}월 ${d.day}일";
   }
-  // 플랫폼별 날짜 선택 (iOS: CupertinoDatePicker, Android: showDatePicker)
+
+  // 플랫폼별 날짜 선택 (iOS: CupertinoDatePicker, Android: 커스텀 모달)
   Future<void> _pickDateAdaptive() async {
     if (Platform.isIOS) {
       _showCupertinoDatePicker();
     } else {
-      final picked = await showDatePicker(
-        context: context,
-        initialDate: selectedDate,
-        firstDate: DateTime(2010),
-        lastDate: DateTime(2035),
-        helpText: '날짜 선택',
-      );
-      if (picked != null) setState(() => selectedDate = picked);
+      _showMaterialDatePicker();
     } 
   }
 
-  // ✅ iOS 스타일 모달 피커
-  void _showCupertinoDatePicker() {
-  DateTime temp = selectedDate;
-  final min = DateTime.now().subtract(const Duration(days: 365 * 10));
-  final max = DateTime.now().add(const Duration(days: 365));
+  // Android용 예쁜 모달 날짜 선택기
+  void _showMaterialDatePicker() {
+    DateTime tempDate = selectedDate;
+    final min = DateTime.now().subtract(const Duration(days: 365 * 10));
+    final max = DateTime.now().add(const Duration(days: 365));
 
-  showCupertinoModalPopup(
-    context: context,
-    builder: (context) {
-      return CupertinoTheme(
-        data: CupertinoThemeData(
-          brightness: Brightness.light,
-          primaryColor: ColorTheme.subColor, // 취소/완료 텍스트 색
-        ),
-        child: CupertinoPopupSurface( // iOS 모달 표면 느낌
-          isSurfacePainted: true,
-          child: Container(
-            height: 320,
-            color: CupertinoColors.systemBackground,
-            child: SafeArea(
-              top: false,
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.6,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
               child: Column(
                 children: [
-                  // 상단 액션 바 (iOS 스타일: 텍스트 버튼)
-                  SizedBox(
-                    height: 44,
+                  // 상단 헤더
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                      
+                    ),
                     child: Row(
                       children: [
-                        CupertinoButton(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: const Text('취소'),
+                        TextButton(
                           onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            '취소',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
                         const Spacer(),
-                        CupertinoButton(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: const Text(
-                            '완료',
-                            style: TextStyle(fontWeight: FontWeight.w600),
+                        Text(
+                          '날짜 선택',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: ColorTheme.textBlack,
                           ),
+                        ),
+                        const Spacer(),
+                        TextButton(
                           onPressed: () {
-                            setState(() => selectedDate = temp);
+                            setState(() => selectedDate = tempDate);
                             Navigator.pop(context);
                           },
+                          child: Text(
+                            '완료',
+                            style: TextStyle(
+                              color: ColorTheme.subColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const Divider(height: 1, thickness: 0.5),
+                  
+                  // 선택된 날짜 표시
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: ColorTheme.subColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: ColorTheme.subColor.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      formatKoreanDate(tempDate),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: ColorTheme.subColor,
+                      ),
+                    ),
+                  ),
 
-                  // 휠 피커
+                  const SizedBox(height: 20),
+
+                  // 날짜 선택기
                   Expanded(
-                    child: CupertinoDatePicker(
-                      mode: CupertinoDatePickerMode.date,
-                      initialDateTime: selectedDate,
-                      minimumDate: min,
-                      maximumDate: max,
-                      // 원하면 순서 고정
-                      // dateOrder: DatePickerDateOrder.ymd,
-                      onDateTimeChanged: (d) => temp = d,
-                      // 배경 고정 (다크/라이트에 영향받지 않게)
-                      backgroundColor: CupertinoColors.systemBackground,
+                    child: Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: ColorScheme.light(
+                          primary: ColorTheme.mainColor, // 오늘 날짜
+                          onPrimary: ColorTheme.subColor,
+                          surface: Colors.white,
+                          onSurface: ColorTheme.textBlack,
+                        ),
+                      ),
+                      child: CalendarDatePicker(
+                        initialDate: tempDate,
+                        firstDate: min,
+                        lastDate: max,
+                        onDateChanged: (date) {
+                          setModalState(() {
+                            tempDate = date;
+                          });
+                        },
+                      ),
                     ),
                   ),
                 ],
               ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // iOS 스타일 모달 피커
+  void _showCupertinoDatePicker() {
+    DateTime temp = selectedDate;
+    final min = DateTime.now().subtract(const Duration(days: 365 * 10));
+    final max = DateTime.now().add(const Duration(days: 365));
+
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) {
+        return CupertinoTheme(
+          data: CupertinoThemeData(
+            brightness: Brightness.light,
+            primaryColor: ColorTheme.subColor,
+          ),
+          child: CupertinoPopupSurface(
+            isSurfacePainted: true,
+            child: Container(
+              height: 320,
+              color: CupertinoColors.systemBackground,
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 44,
+                      child: Row(
+                        children: [
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: const Text('취소'),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                          const Spacer(),
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: const Text(
+                              '완료',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            onPressed: () {
+                              setState(() => selectedDate = temp);
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, thickness: 0.5),
+                    Expanded(
+                      child: CupertinoDatePicker(
+                        mode: CupertinoDatePickerMode.date,
+                        initialDateTime: selectedDate,
+                        minimumDate: min,
+                        maximumDate: max,
+                        onDateTimeChanged: (d) => temp = d,
+                        backgroundColor: CupertinoColors.systemBackground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      );
-    },
-  );
-}
-Future<void> _onNext() async {
+        );
+      },
+    );
+  }
+
+  // ✅ Firebase에 시작일 저장
+  Future<void> _onNext() async {
     if (_saving) return;
     FocusScope.of(context).unfocus();
 
-    // 닉 화면에서 넘겨준 값 받기
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
     final userId   = (args?['userId'] as String?) ?? '';
@@ -126,32 +250,28 @@ Future<void> _onNext() async {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('사용자 정보를 찾을 수 없어요.'), backgroundColor: Colors.red),
       );
-      // 디버그
-      // ignore: avoid_print
-      print('[RecentScreen] missing userId. args=$args');
+      debugPrint('[RecentScreen] missing userId. args=$args');
       return;
     }
 
     setState(() => _saving = true);
     try {
       if (periodId == null || periodId.isEmpty) {
-        // 혹시 드래프트가 없으면 즉시 생성
+        // 드래프트가 없으면 새로 생성
         periodId = await _service.createDraftWithNick(
           userId: userId,
           nick: (nick ?? '알림'),
         );
-        // ignore: avoid_print
-        print('[RecentScreen] draft created on the fly: $periodId');
+        debugPrint('[RecentScreen] draft created: $periodId');
       }
 
-      // startDate만 업데이트
+      // ✅ Firestore에 startDate 저장
       await _service.updatePeriodData(periodId, {
-        'startDate': selectedDate,
+        'startDate': Timestamp.fromDate(selectedDate),
       });
-      // ignore: avoid_print
-      print('[RecentScreen] startDate saved for $periodId : $selectedDate');
+      debugPrint('[RecentScreen] startDate saved: $selectedDate');
 
-      // 다음 화면으로 이동 (기존처럼 recentStartDate도 넘겨둠)
+      // 다음 화면으로 이동
       Navigator.pushNamed(
         context,
         '/input_cycle',
@@ -166,14 +286,12 @@ Future<void> _onNext() async {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('저장 실패: ${e.message ?? e.code}'), backgroundColor: Colors.red),
       );
-      // ignore: avoid_print
-      print('[RecentScreen] FirebaseException: ${e.code} ${e.message}');
+      debugPrint('[RecentScreen] FirebaseException: ${e.code} ${e.message}');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('저장에 실패했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
       );
-      // ignore: avoid_print
-      print('[RecentScreen] Unknown error: $e');
+      debugPrint('[RecentScreen] Unknown error: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -226,14 +344,14 @@ Future<void> _onNext() async {
             ),
             const SizedBox(height: 40),
 
-            // 날짜 표시 + 탭하여 피커 열기
+            // 날짜 표시
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color:ColorTheme.borderGray,
+                  color: ColorTheme.borderGray,
                   width: 0.2,
                 ),
               ),
@@ -244,7 +362,6 @@ Future<void> _onNext() async {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                       decoration: BoxDecoration(
-                        // color: const Color(0xFFF2F3F5),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
@@ -267,7 +384,7 @@ Future<void> _onNext() async {
 
             ConfirmButton(
               text: '다음',
-              isEnabled: !_saving, // 저장 중에는 비활성화로 중복 방지
+              isEnabled: !_saving,
               onPressed: _saving ? null : _onNext,
             ),
             const SizedBox(height: 20),

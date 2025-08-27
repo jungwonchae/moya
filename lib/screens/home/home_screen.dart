@@ -392,7 +392,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           status: padStatus, // Firebase에서 가져온 상태
                           showDemoToggle: false, // 개발 중에는 true, 출시 시 false
                           onStatusChanged: _onStatusChanged,
-                          onStartTap: () => Navigator.pushNamed(context, '/input_recent'),
+                          onStartTap: () => Navigator.pushNamed(
+                            context,
+                            '/input_recent',
+                            arguments: {
+                              'userId': userId,   // ← FirebaseAuth에서 가져온 uid
+                              'periodId': null,   // 아직 없으면 null 전달
+                              'nick': name,       // 사용자 이름 있으면 전달
+                            },
+                          ),
                           changeCount: changeCount,
                           lastChangeText: lastChangeText,
                         ),

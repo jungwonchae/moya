@@ -65,18 +65,152 @@ class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
   Future<void> _pickDateAdaptive() async {
     if (recentStartDate == null) return;
     
+    // 날짜 함수
+  String formatKoreanDate(DateTime d) {
+    return "${d.year}년 ${d.month}월 ${d.day}일";
+  }
+
+  // 플랫폼별 날짜 선택 (iOS: CupertinoDatePicker, Android: 커스텀 모달)
+  Future<void> _pickDateAdaptive() async {
     if (Platform.isIOS) {
       _showCupertinoDatePicker();
     } else {
-      final picked = await showDatePicker(
-        context: context,
-        initialDate: selectedDate,
-        firstDate: recentStartDate!,
-        lastDate: DateTime(2035),
-        helpText: '날짜 선택',
-      );
-      if (picked != null) setState(() => selectedDate = picked);
+      _showMaterialDatePicker();
     } 
+  }
+
+  // Android용 예쁜 모달 날짜 선택기
+  void _showMaterialDatePicker() {
+    DateTime tempDate = selectedDate;
+    final min = DateTime.now().subtract(const Duration(days: 365 * 10));
+    final max = DateTime.now().add(const Duration(days: 365));
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.6,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // 상단 헤더
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                      
+                    ),
+                    child: Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            '취소',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '날짜 선택',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: ColorTheme.textBlack,
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () {
+                            setState(() => selectedDate = tempDate);
+                            Navigator.pop(context);
+                          },
+                          child: Text(
+                            '완료',
+                            style: TextStyle(
+                              color: ColorTheme.subColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // 선택된 날짜 표시
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: ColorTheme.subColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: ColorTheme.subColor.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      formatKoreanDate(tempDate),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: ColorTheme.subColor,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // 날짜 선택기
+                  Expanded(
+                    child: Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: ColorScheme.light(
+                          primary: ColorTheme.mainColor, // 오늘 날짜
+                          onPrimary: ColorTheme.subColor,
+                          surface: Colors.white,
+                          onSurface: ColorTheme.textBlack,
+                        ),
+                      ),
+                      child: CalendarDatePicker(
+                        initialDate: tempDate,
+                        firstDate: min,
+                        lastDate: max,
+                        onDateChanged: (date) {
+                          setModalState(() {
+                            tempDate = date;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   // iOS 스타일 모달 피커
