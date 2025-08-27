@@ -105,23 +105,82 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 다음 생리까지 남은 일수 계산
   void _calculateDaysUntilNext(Map<String, dynamic> latestPeriod) {
-    try {
-      final endDate = (latestPeriod['endDate'] as Timestamp?)?.toDate();
-      final cycleLength = latestPeriod['cycleLength'] as int? ?? 28;
-      
-      if (endDate != null) {
-        final nextPeriodDate = endDate.add(Duration(days: cycleLength));
-        final daysLeft = nextPeriodDate.difference(DateTime.now()).inDays;
-        
-        setState(() {
-          daysUntilNext = daysLeft > 0 ? daysLeft : 0;
-          isOnPeriod = daysLeft <= 0; // 예상일이 지났으면 생리 중
-        });
+  try {
+    final now = DateTime.now();
+
+    final startDate = (latestPeriod['startDate'] as Timestamp?)?.toDate();
+    final endDate   = (latestPeriod['endDate']   as Timestamp?)?.toDate();
+    final cycleLen  = latestPeriod['cycleLength'] as int? ?? 28;
+    final periodLen = latestPeriod['periodLength'] as int? ?? 5;
+
+    // 1) 문서에 isOnPeriod가 있으면 우선 사용
+    final isOnPeriodField = latestPeriod['isOnPeriod'] as bool?;
+
+    bool onPeriod;
+    int  daysLeft;
+
+    if (isOnPeriodField != null) {
+      onPeriod = isOnPeriodField;
+
+      if (onPeriod) {
+        // 종료일이 있으면 그날까지 남은 일수, 없으면 startDate + periodLen 기준
+        final pseudoEnd = endDate ?? startDate?.add(Duration(days: periodLen - 1));
+        if (pseudoEnd != null) {
+          // +1 해서 "오늘 포함 며칠 남음" 느낌으로 보이고 싶다면 +1 유지/조정
+          daysLeft = (pseudoEnd.difference(DateTime(now.year, now.month, now.day)).inDays + 1).clamp(0, 999);
+        } else {
+          daysLeft = 0;
+        }
+      } else {
+        // 다음 생리까지 남은 일수 (endDate가 있으면 endDate+cycle, 없으면 startDate+cycle)
+        final base = endDate ?? startDate;
+        if (base != null) {
+          final nextDate = base.add(Duration(days: cycleLen));
+          daysLeft = (DateTime(nextDate.year, nextDate.month, nextDate.day)
+                        .difference(DateTime(now.year, now.month, now.day)).inDays)
+                      .clamp(0, 999);
+        } else {
+          daysLeft = 0;
+        }
       }
-    } catch (e) {
-      print('날짜 계산 실패: $e');
+    } else {
+      // 2) isOnPeriod 필드가 없으면 날짜로 추정
+      //    - endDate가 없으면 startDate ~ (startDate + periodLen - 1) 동안은 생리 중으로 간주
+      //    - endDate가 있으면 now가 start~end 사이면 생리 중
+      if (startDate != null) {
+        final pseudoEnd = endDate ?? startDate.add(Duration(days: periodLen - 1));
+        final today = DateTime(now.year, now.month, now.day);
+        final startD = DateTime(startDate.year, startDate.month, startDate.day);
+        final endD   = DateTime(pseudoEnd.year, pseudoEnd.month, pseudoEnd.day);
+
+        final within = (today.isAfter(startD) || today.isAtSameMomentAs(startD)) &&
+                       (today.isBefore(endD)   || today.isAtSameMomentAs(endD));
+
+        onPeriod = within;
+
+        if (onPeriod) {
+          daysLeft = (endD.difference(today).inDays + 1).clamp(0, 999); // 오늘 포함 남은 일수
+        } else {
+          final base = endDate ?? startDate;
+          final nextDate = base.add(Duration(days: cycleLen));
+          daysLeft = (DateTime(nextDate.year, nextDate.month, nextDate.day)
+                        .difference(today).inDays).clamp(0, 999);
+        }
+      } else {
+        // start/end 둘 다 없으면 안전값
+        onPeriod = false;
+        daysLeft = 0;
+      }
     }
+
+    setState(() {
+      daysUntilNext = daysLeft;
+      isOnPeriod = onPeriod;
+    });
+  } catch (e) {
+    print('날짜 계산 실패: $e');
   }
+}
 
   /// 데이터 새로고침
   Future<void> _refreshData() async {
@@ -157,80 +216,81 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadUserData() async {
-  if (!mounted || userId == null) return;
-  
-  setState(() => _isLoading = true);
-
-  try {
-    // Firebase 연결 확인
-    final isConnected = await _checkFirebaseConnection();
-    if (!isConnected) {
-      throw Exception('Firebase 연결 실패');
-    }
-
-    print('사용자 데이터 로딩 시작: $userId');
+    if (!mounted || userId == null) return;
     
-    // 사용자 문서가 존재하는지 확인
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .get();
-    
-    if (!userDoc.exists) {
-      print('사용자 문서가 존재하지 않음. 새로 생성...');
-      // 새 사용자 문서 생성
-      await _createNewUserDocument();
-    }
+    setState(() => _isLoading = true);
 
-    // UserService를 사용해서 사용자 이름 가져오기
-    final fetchedUserName = await _userService.getUserName(userId!);
-    
-    // PeriodService에서 생리 정보 가져오기
-    final results = await Future.wait([
-      _periodService.getLatestFlow(userId!),
-      _periodService.getLatestPeriod(userId!),
-    ]);
+    try {
+      // Firebase 연결 확인
+      final isConnected = await _checkFirebaseConnection();
+      if (!isConnected) {
+        throw Exception('Firebase 연결 실패');
+      }
 
-    final fetchedFlow = results[0] as String?;
-    final latestPeriod = results[1] as Map<String, dynamic>?;
-
-    if (mounted) {
-      setState(() {
-        name = fetchedUserName;
-        currentFlow = fetchedFlow ?? 'before';
-        padStatus = _convertFlowToPadStatus(currentFlow);
-        
-        if (latestPeriod != null) {
-          _calculateDaysUntilNext(latestPeriod);
-        }
-        
-        _isLoading = false;
-      });
+      print('사용자 데이터 로딩 시작: $userId');
       
-      print('사용자 데이터 로드 완료: 이름=$name, 상태=$currentFlow');
-    }
-  } catch (e) {
-    print('사용자 데이터 로드 실패: $e');
-    if (mounted) {
-      setState(() {
-        // 이름은 강제로 기본값을 넣지 않음 (null 유지)
-        currentFlow = 'before';
-        padStatus = PadStatus.before;
-        _isLoading = false;
-      });
+      // 사용자 문서가 존재하는지 확인
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
       
-      // 사용자에게 오류 알림
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('데이터를 불러올 수 없습니다. 인터넷 연결을 확인해주세요.'),
-          action: SnackBarAction(
-            label: '다시 시도',
-            onPressed: _loadUserData,
+      if (!userDoc.exists) {
+        print('사용자 문서가 존재하지 않음. 새로 생성...');
+        // 새 사용자 문서 생성
+        await _createNewUserDocument();
+      }
+
+      // UserService를 사용해서 사용자 이름 가져오기
+      final fetchedUserName = await _userService.getUserName(userId!);
+      
+      // PeriodService에서 생리 정보 가져오기
+      final results = await Future.wait([
+        _periodService.getLatestFlow(userId!),
+        _periodService.getLatestPeriod(userId!),
+      ]);
+
+      final fetchedFlow = results[0] as String?;
+      final latestPeriod = results[1] as Map<String, dynamic>?;
+
+      if (mounted) {
+        setState(() { 
+          name = fetchedUserName;
+          currentFlow = fetchedFlow ?? 'before';
+          padStatus = _convertFlowToPadStatus(currentFlow);
+          
+          if (latestPeriod != null) {
+            _calculateDaysUntilNext(latestPeriod);
+          }
+          
+          _isLoading = false;
+        });
+        
+        print('사용자 데이터 로드 완료: 이름=$name, 상태=$currentFlow');
+      }
+    } catch (e) {
+      print('사용자 데이터 로드 실패: $e');
+      if (mounted) {
+        setState(() {
+          // 초기값
+          // 이름은 강제로 기본값을 넣지 않음 (null 유지)
+          currentFlow = 'before';
+          padStatus = PadStatus.before;
+          _isLoading = false;
+        });
+        
+        // 사용자에게 오류 알림
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('데이터를 불러올 수 없습니다. 인터넷 연결을 확인해주세요.'),
+            action: SnackBarAction(
+              label: '다시 시도',
+              onPressed: _loadUserData,
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
-  }
 }
 
   /// PadStatus를 Flow로 변환

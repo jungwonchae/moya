@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:moya_app/themes/colortheme.dart';
 
 class InputPeriodSettingScreen extends StatefulWidget {
   @override
@@ -135,7 +136,7 @@ class _InputPeriodSettingScreenState extends State<InputPeriodSettingScreen> {
                     title,
                     style: TextStyle(
                       fontSize: 14,
-                      color: Color(0xFFFF85B4),
+                      color: ColorTheme.subColor,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -154,7 +155,7 @@ class _InputPeriodSettingScreenState extends State<InputPeriodSettingScreen> {
                       subtitle,
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.grey[600],
+                        color: ColorTheme.textGray,
                       ),
                     ),
                   ],
@@ -182,7 +183,7 @@ class _InputPeriodSettingScreenState extends State<InputPeriodSettingScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: Color(0xFFFF85B4),
+              primary: ColorTheme.subColor,
             ),
           ),
           child: child!,
@@ -206,7 +207,7 @@ class _InputPeriodSettingScreenState extends State<InputPeriodSettingScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: Color(0xFFFF85B4),
+              primary: ColorTheme.subColor,
             ),
           ),
           child: child!,
@@ -241,10 +242,10 @@ class _InputPeriodSettingScreenState extends State<InputPeriodSettingScreen> {
                     onTap: () => setDialogState(() => cycleLength = days),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: isSelected ? Color(0xFFFF85B4) : Colors.white,
+                        color: isSelected ? ColorTheme.subColor : Colors.white,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: isSelected ? Color(0xFFFF85B4) : Colors.grey[300]!,
+                          color: isSelected ? ColorTheme.subColor : Colors.grey[300]!,
                         ),
                       ),
                       child: Center(
@@ -273,7 +274,7 @@ class _InputPeriodSettingScreenState extends State<InputPeriodSettingScreen> {
               setState(() {});
               Navigator.pop(context);
             },
-            child: Text('확인', style: TextStyle(color: Color(0xFFFF85B4))),
+            child: Text('확인', style: TextStyle(color: ColorTheme.subColor,)),
           ),
         ],
       ),

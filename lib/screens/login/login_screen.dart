@@ -2,8 +2,48 @@ import 'package:flutter/material.dart';
 import '../usage/usage_screens_container.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:moya_app/themes/colortheme.dart';
+import 'package:moya_app/screens/home/home_screen.dart';
+
+// Firebase
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatelessWidget {
+
+  const LoginScreen({super.key});
+
+  // 비회원 로그인을 위함
+  // 익명 로그인 → Users/{uid} 초기화 → true/false 반환
+  Future<bool> _signInAnonymouslyAndInit(BuildContext context) async {
+    try {
+      // 1) 익명 로그인
+      final cred = await FirebaseAuth.instance.signInAnonymously();
+      final uid = cred.user!.uid;
+      debugPrint('[Auth] Anonymous signed in. uid=$uid');
+
+      // 2) Users/{uid} 문서가 없으면 생성 (merge로 안전하게)
+      final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final snap = await usersRef.get();
+      if (!snap.exists) {
+        await usersRef.set({
+          'name': '사용자',          // 기본 표시 이름(원하면 닉네임 설정 화면에서 변경)
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        debugPrint('[Firestore] users/$uid initialized.');
+      } else {
+        debugPrint('[Firestore] users/$uid already exists.');
+      }
+
+      return true;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('[Auth] Anonymous sign-in failed: ${e.code} ${e.message}');
+      return false;
+    } catch (e) {
+      debugPrint('[Auth] Anonymous sign-in failed: $e');
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -125,21 +165,43 @@ class LoginScreen extends StatelessWidget {
                   
                   SizedBox(height: 15),
                   
-                  // 비회원 시작 버튼
-                  Container(
+                  // 비회원 시작 버튼 (익명 로그인 연결)
+                  SizedBox(
                     width: double.infinity,
                     child: TextButton(
-                      onPressed: () {
-                      // 회원가입 -> Usage 화면으로 직접 이동 (파라미터 전달)
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => UsageScreensContainer(isFromOnboarding: true),
-                        ),
-                      );
-                    },
+                      onPressed: () async {
+                        // 1) 익명 로그인 & users/{uid} 준비
+                        final ok = await _signInAnonymouslyAndInit(context);
+                        if (!ok) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('비회원 로그인에 실패했어요. 잠시 후 다시 시도해주세요.')),
+                            );
+                          }
+                          return;
+                        }
+
+                        if (!context.mounted) return;
+
+                        // 2) name 존재 여부 체크
+                        final uid = FirebaseAuth.instance.currentUser!.uid;
+                        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+                        final hasName = ((userDoc.data()?['name'] as String?)?.trim().isNotEmpty ?? false);
+
+                        // 3) 분기 이동
+                        if (context.mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => hasName
+                                  ? HomeScreen() // 이름이 있으면 바로 홈
+                                  : const UsageScreensContainer(isFromOnboarding: true), // 없으면 온보딩
+                            ),
+                          );
+                        }
+                      },
                       style: TextButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -154,8 +216,8 @@ class LoginScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  
-                  SizedBox(height: 50),
+
+                  const SizedBox(height: 50),
                 ],
               ),
             ),
