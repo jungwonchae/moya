@@ -1,1 +1,52 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"moya-ff7e0","appId":"1:996921654382:android:8aeb753615325d56f07a7f","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"moya-ff7e0","appId":"1:996921654382:ios:0990d12110c93a00f07a7f","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"macos":{"default":{"projectId":"moya-ff7e0","appId":"1:996921654382:ios:0990d12110c93a00f07a7f","uploadDebugSymbols":false,"fileOutput":"macos/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"moya-ff7e0","configurations":{"android":"1:996921654382:android:8aeb753615325d56f07a7f","ios":"1:996921654382:ios:0990d12110c93a00f07a7f","macos":"1:996921654382:ios:0990d12110c93a00f07a7f"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "moya-ff7e0",
+          "appId": "1:996921654382:android:8aeb753615325d56f07a7f",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "moya-ff7e0",
+          "appId": "1:996921654382:ios:0990d12110c93a00f07a7f",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "moya-ff7e0",
+          "appId": "1:996921654382:ios:0990d12110c93a00f07a7f",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "moya-ff7e0",
+          "configurations": {
+            "android": "1:996921654382:android:8aeb753615325d56f07a7f",
+            "ios": "1:996921654382:ios:0990d12110c93a00f07a7f",
+            "macos": "1:996921654382:ios:0990d12110c93a00f07a7f"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}
