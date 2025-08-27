@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../usage/usage_screens_container.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:moya_app/themes/colortheme.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -17,8 +18,25 @@ class LoginScreen extends StatelessWidget {
               width: 300,
               height: 300,
               decoration: BoxDecoration(
-                color: Color(0xFFF8BBD9),
+                color: ColorTheme.subColor.withOpacity(0.5),
                 shape: BoxShape.circle,
+              ),
+            ),
+          ),
+
+          // 왼쪽 아래 원형
+          Positioned(
+            top: 390,
+            left: -200, // 왼쪽으로 빼기
+            child: Container(
+              width: 365,
+              height: 365,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: ColorTheme.subColor.withOpacity(0.1), // subColor, 10% 투명도
+                  width: 3, // 테두리 두께 (원하는 대로 조정)
+                ),
               ),
             ),
           ),
@@ -36,24 +54,35 @@ class LoginScreen extends StatelessWidget {
                   Container(
                     width: 50,
                     height: 50,
-                    decoration: BoxDecoration(
-                      color: Color(0xFFFF85B4),
-                      borderRadius: BorderRadius.circular(10),
+                    alignment: Alignment.centerLeft,
+                    child: SvgPicture.asset(
+                        'assets/icons/moya.svg',
+                        width: 30,
+                        height: 30,
+                        color: ColorTheme.subColor, // 필요하다면 색상 입히기 가능
+                      ),
                     ),
-                    child: Icon(
-                      Icons.water_drop,
-                      color: Colors.white,
-                      size: 30,
+                  
+                  SizedBox(height: 20),
+
+                  // 제목 텍스트 1
+                  Text(
+                    '안녕하세요.',
+                    textAlign: TextAlign.start,
+                    style: TextStyle(
+                      fontSize: 25,
+                      fontWeight: FontWeight.normal,
+                      height: 1.3,
+                      color: Colors.black87,
                     ),
                   ),
                   
-                  SizedBox(height: 30),
-                  
-                  // 제목 텍스트
+                  // 제목 텍스트 2
                   Text(
-                    '안녕하세요.\nMOYA 입니다.',
+                    'MOYA 입니다.',
+                    textAlign: TextAlign.start,
                     style: TextStyle(
-                      fontSize: 24,
+                      fontSize: 25,
                       fontWeight: FontWeight.bold,
                       height: 1.3,
                       color: Colors.black87,
@@ -85,7 +114,7 @@ class LoginScreen extends StatelessWidget {
                         elevation: 0,
                       ),
                       child: Text(
-                        '회원가입하기',
+                        '회원가입 하기',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,

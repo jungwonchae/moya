@@ -1,11 +1,13 @@
+import 'dart:io' show Platform;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:moya_app/themes/colortheme.dart';  // mainColor 가져오기
+import 'package:moya_app/themes/colortheme.dart';
 import 'package:moya_app/widgets/confirm_button.dart';
 import 'package:moya_app/widgets/choice_button.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:moya_app/services/period_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 
 class InputPeriodDaysScreen extends StatefulWidget {
   @override
@@ -13,80 +15,239 @@ class InputPeriodDaysScreen extends StatefulWidget {
 }
 
 class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
-  TextEditingController dayController = TextEditingController();
+  bool? isOnMedication;
+  DateTime selectedDate = DateTime.now().subtract(const Duration(days: 7));
+  DateTime? recentStartDate;
+  
   final PeriodService _service = PeriodService();
   bool _saving = false;
 
-  final List<String> dayPresets = ["3", "4", "5", "6"];
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  Future<void> _onNext() async {
-    if (_saving) return;
+  @override
+  void initState() {
+    super.initState();
+    // arguments에서 recentStartDate 가져오기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
+      final startDate = args['recentStartDate'] as DateTime?;
+      
+      if (startDate != null) {
+        setState(() {
+          recentStartDate = _dateOnly(startDate);
+          // selectedDate가 recentStartDate 이전이면 보정
+          final selectedOnly = _dateOnly(selectedDate);
+          if (selectedOnly.isBefore(recentStartDate!)) {
+            selectedDate = recentStartDate!.add(const Duration(days: 1));
+          }
+        });
+      } else {
+        // startDate가 없을 때 안내
+        debugPrint('[DaysScreen] recentStartDate not found in arguments');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('생리 시작일 정보를 불러오지 못했어요. 이전 단계에서 먼저 시작일을 저장해 주세요.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    });
+  }
 
-    final daysText = dayController.text.trim();
-    final days = int.tryParse(daysText);
-    if (days == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('숫자를 입력해 주세요.'), backgroundColor: Colors.red),
+  // 날짜 함수
+  String formatKoreanDate(DateTime d) {
+    return "${d.year}년 ${d.month}월 ${d.day}일";
+  }
+  
+  // 플랫폼별 날짜 선택
+  Future<void> _pickDateAdaptive() async {
+    if (recentStartDate == null) return;
+    
+    if (Platform.isIOS) {
+      _showCupertinoDatePicker();
+    } else {
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: selectedDate,
+        firstDate: recentStartDate!,
+        lastDate: DateTime(2035),
+        helpText: '날짜 선택',
       );
-      return;
-    }
+      if (picked != null) setState(() => selectedDate = picked);
+    } 
+  }
+
+  // iOS 스타일 모달 피커
+  void _showCupertinoDatePicker() {
+    if (recentStartDate == null) return;
+    
+    DateTime temp = selectedDate;
+    final min = recentStartDate!;
+    final max = DateTime.now().add(const Duration(days: 365));
+
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) {
+        return CupertinoTheme(
+          data: CupertinoThemeData(
+            brightness: Brightness.light,
+            primaryColor: ColorTheme.subColor,
+          ),
+          child: CupertinoPopupSurface(
+            isSurfacePainted: true,
+            child: Container(
+              height: 320,
+              color: CupertinoColors.systemBackground,
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 44,
+                      child: Row(
+                        children: [
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: const Text('취소'),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                          const Spacer(),
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: const Text(
+                              '완료',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            onPressed: () {
+                              setState(() => selectedDate = temp);
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, thickness: 0.5),
+                    Expanded(
+                      child: CupertinoDatePicker(
+                        mode: CupertinoDatePickerMode.date,
+                        initialDateTime: selectedDate,
+                        minimumDate: min,
+                        maximumDate: max,
+                        onDateTimeChanged: (d) => temp = d,
+                        backgroundColor: CupertinoColors.systemBackground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Firebase에 생리 정보 저장
+  Future<void> _savePeriodToFirebase() async {
+    if (_saving || recentStartDate == null) return;
 
     final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
-    final recentStartDate = args['recentStartDate'] as DateTime?;
     final userId = args['userId'] as String?;
     final periodId = args['periodId'] as String?;
-    final cycleLength = args['cycleLength']; // 다음 화면에 넘길 용도(있으면)
 
     if (userId == null || userId.isEmpty || periodId == null || periodId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('세션 정보가 없습니다. 처음부터 다시 시도해 주세요.'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('세션 정보가 없습니다. 처음부터 다시 시도해 주세요.'),
+          backgroundColor: Colors.red,
+        ),
       );
-      // ignore: avoid_print
-      print('[DaysScreen] missing userId/periodId. args=$args');
+      debugPrint('[DaysScreen] missing userId/periodId. args=$args');
       return;
     }
 
-    FocusScope.of(context).unfocus();
     setState(() => _saving = true);
-    try {
-      await _service.updatePeriodData(periodId, {
-        'periodLength': days,
-      });
-      // ignore: avoid_print
-      print('[DaysScreen] periodLength saved: $days for periodId=$periodId');
 
-      Navigator.pushNamed(
-        context,
-        '/input_extra',
-        arguments: {
-          'userId': userId,
-          'periodId': periodId,
-          'recentStartDate': recentStartDate,
-          'cycleLength': cycleLength,
-          'periodLength': days,
-        },
-      );
+    try {
+      // periodId를 사용해서 해당 문서를 업데이트
+      final updateData = <String, dynamic>{};
+      
+      // 종료일이 설정되었으면 추가
+      if (selectedDate != recentStartDate) {
+        updateData['endDate'] = Timestamp.fromDate(selectedDate);
+      }
+      
+      // 피임약 정보가 설정되었으면 추가
+      if (isOnMedication != null) {
+        updateData['isOnMedication'] = isOnMedication;
+      }
+      
+      // 업데이트할 데이터가 있으면 저장
+      if (updateData.isNotEmpty) {
+        await _service.updatePeriodData(periodId, updateData);
+        debugPrint('[DaysScreen] Extra data saved for periodId=$periodId: $updateData');
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('생리 정보가 저장되었습니다!'),
+            backgroundColor: ColorTheme.subColor,
+          ),
+        );
+        
+        // 다음 화면으로 이동 (필요한 데이터 전달)
+        Navigator.pushNamed(
+          context,
+          '/input_ble',
+          arguments: {
+            'userId': userId,
+            'periodId': periodId,
+            'recentStartDate': recentStartDate,
+            ...args, // 기존 arguments도 함께 전달
+          },
+        );
+      }
+
     } on FirebaseException catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('저장 실패: ${e.message ?? e.code}'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('저장 실패: ${e.message ?? e.code}'),
+          backgroundColor: Colors.red,
+        ),
       );
-      // ignore: avoid_print
-      print('[DaysScreen] FirebaseException: ${e.code} ${e.message}');
+      debugPrint('[DaysScreen] FirebaseException: ${e.code} ${e.message}');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('저장에 실패했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('저장에 실패했습니다. 다시 시도해 주세요.'),
+          backgroundColor: Colors.red,
+        ),
       );
-      // ignore: avoid_print
-      print('[DaysScreen] Unknown error: $e');
+      debugPrint('[DaysScreen] Unknown error: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  // 건너뛰기 처리
+  void _onSkip() {
+    if (_saving) return;
+    
+    final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
+    Navigator.pushNamed(
+      context,
+      '/input_ble',
+      arguments: args, // 기존 arguments 그대로 전달
+    );
+  }
   
   @override
   Widget build(BuildContext context) {
-    final args = (ModalRoute.of(context)!.settings.arguments as Map?) ?? {};
-    final recentStartDate = args['recentStartDate'] as DateTime;
+    final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
+    
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -102,11 +263,10 @@ class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // 단계 표시
             Text(
-              '생리 기간',
+              '(선택) 추가 질문',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 14, 
                 color: ColorTheme.subColor,
                 fontWeight: FontWeight.w600,
               ),
@@ -114,9 +274,8 @@ class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
             
             SizedBox(height: 20),
             
-            // 제목
             Text(
-              '생리는 보통\n며칠 동안 지속되나요?',
+              '더 정확한 예측을\n위해 알려주세요',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 24,
@@ -125,111 +284,173 @@ class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
               ),
             ),
             
-            SizedBox(height: 8),
+            SizedBox(height: 40),
             
-            // 부제목
-            Text(
-              '평균 며칠간 출혈이 지속되는지 알려주세요',
-              style: TextStyle(
-                fontSize: 14,
-                color: ColorTheme.textGray,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: ColorTheme.subColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    '최근 생리 종료일 (몰라도 괜찮아요)',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: ColorTheme.textGray,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            SizedBox(height: 15),
+            
+            if (recentStartDate != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 15),
+                child: Text(
+                  '생리 시작일(${formatKoreanDate(recentStartDate!)}) 이후 날짜만 선택 가능합니다.',
+                  textAlign: TextAlign.left,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: ColorTheme.subColor,
+                  ),
+                ),
+              ),
+            
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: ColorTheme.borderGray,
+                  width: 0.2,
+                ),
+              ),
+              child: Column(
+                children: [
+                  GestureDetector(
+                    onTap: recentStartDate != null ? _pickDateAdaptive : null,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        formatKoreanDate(selectedDate),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18, 
+                          fontWeight: FontWeight.w600,
+                          color: recentStartDate != null ? Colors.black : Colors.grey,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    recentStartDate != null ? '탭하여 날짜 변경' : '생리 시작일 정보가 필요합니다',
+                    style: TextStyle(
+                      fontSize: 12, 
+                      color: recentStartDate != null ? ColorTheme.textLightGray : Colors.red[400],
+                    ),
+                  ),
+                ],
               ),
             ),
             
             SizedBox(height: 40),
             
-            // 선택 버튼들
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Expanded(
-                  child: ChoiceButton<String>(
-                    value: dayPresets[0],
-                    label: "${dayPresets[0]}일",                 // 화면 표시용
-                    isSelected: dayController.text.trim() == dayPresets[0],
-                    onTap: () => setState(() => dayController.text = dayPresets[0]),
+                Container(
+                  width: 6,
+                  height: 6,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: ColorTheme.subColor,
+                    shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 15),
                 Expanded(
-                  child: ChoiceButton<String>(
-                    value: dayPresets[1],
-                    label: "${dayPresets[1]}일",                 // 화면 표시용
-                    isSelected: dayController.text.trim() == dayPresets[1],
-                    onTap: () => setState(() => dayController.text = dayPresets[1]),
+                  child: Text(
+                    '피임약이나 호르몬 치료 중인가요?',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: ColorTheme.textGray,
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 15),
+
+            SizedBox(height: 20),
+            
             Row(
               children: [
                 Expanded(
-                  child: ChoiceButton<String>(
-                    value: dayPresets[2],
-                    label: "${dayPresets[2]}일",                 // 화면 표시용
-                    isSelected: dayController.text.trim() == dayPresets[2],
-                    onTap: () => setState(() => dayController.text = dayPresets[2]),
+                  child: ChoiceButton<bool>(
+                    value: true,
+                    label: '네',
+                    isSelected: isOnMedication == true,
+                    onTap: () {
+                      setState(() {
+                        isOnMedication = (isOnMedication == true) ? null : true;
+                      });
+                    },
                   ),
                 ),
-                const SizedBox(width: 15),
+                SizedBox(width: 15),
                 Expanded(
-                  child: ChoiceButton<String>(
-                    value: dayPresets[3],
-                    label: "${dayPresets[3]}일",                 // 화면 표시용
-                    isSelected: dayController.text.trim() == dayPresets[3],
-                    onTap: () => setState(() => dayController.text = dayPresets[3]),
+                  child: ChoiceButton<bool>(
+                    value: false,
+                    label: '아니오',
+                    isSelected: isOnMedication == false,
+                    onTap: () {
+                      setState(() {
+                        isOnMedication = (isOnMedication == false) ? null : false;
+                      });
+                    },
                   ),
                 ),
               ],
             ),
             
-            const SizedBox(height: 15),
+            SizedBox(height: 30),
             
-            // 입력 필드
-            TextField(
-              controller: dayController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly], //숫자만
-              decoration: InputDecoration(
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: ColorTheme.mainColor, width: 2),
-                ),
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: ColorTheme.subColor, width: 2),
-                ),
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                suffixText: "일",
-              ),
-              onChanged: (value) {
-                setState(() {});
-              },
-            ),
-
-            SizedBox(height: 8),
-            
-
-            // 밑줄(입력) 아래 텍스트
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '직접 입력',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: ColorTheme.textLightGray,
-                ),
-              ),
-            ),
-
             Spacer(),
-            
-            // 다음 버튼
+
             ConfirmButton(
-              text: '다음',                            // 항상 '다음'
-              isEnabled: dayController.text.trim().isNotEmpty && !_saving,
-              onPressed: _saving ? null : _onNext,   // 중복 클릭 방지
+              text: '다음',
+              isEnabled: !_saving && recentStartDate != null,
+              onPressed: _saving ? null : _savePeriodToFirebase,
             ),
 
-            const SizedBox(height: 20),
+            Center(
+              child: TextButton(
+                onPressed: _saving ? null : _onSkip,
+                child: Text(
+                  '건너뛰기',
+                  style: TextStyle(
+                    fontSize: 14, 
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ),
+            ),
+            
+            SizedBox(height: 20),
           ],
         ),
       ),

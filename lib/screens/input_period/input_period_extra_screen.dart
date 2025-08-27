@@ -6,7 +6,9 @@ import 'package:moya_app/widgets/confirm_button.dart';
 import 'package:moya_app/widgets/choice_button.dart';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:moya_app/services/period_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 
 class InputPeriodExtraScreen extends StatefulWidget {
   @override
@@ -22,17 +24,53 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
   final PeriodService _service = PeriodService();
   bool _saving = false;
 
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // 이전 페이지에서 전달받은 데이터 가져오기
-    final args = (ModalRoute.of(context)!.settings.arguments as Map?) ?? {};
-    recentStartDate = args['recentStartDate'] as DateTime?;
-    userId = args['userId'] as String?;
-    
-    // 만약 selectedDate가 recentStartDate보다 이전이면 조정
-    if (recentStartDate != null && selectedDate.isBefore(recentStartDate!)) {
-      selectedDate = recentStartDate!.add(const Duration(days: 1));
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    setState(() => userId = uid);
+
+    if (uid == null) return; // 로그인 필요
+
+    // 최근 시작일 Firestore에서 가져오기
+    final latest = await _service.getLatestPeriod(uid); // 기대: { id, startDate, endDate, ... }
+    final ts = latest?["startDate"];
+    DateTime? start;
+    if (ts is Timestamp) {
+      start = ts.toDate();
+    } else if (ts is DateTime) {
+      start = ts;
+    } else if (ts is String) {
+      start = DateTime.tryParse(ts);
+    }
+
+    if (start != null) {
+      if (!mounted) return; // 위젯 dispose된 뒤 setState 방지
+
+      final startOnly = _dateOnly(start);
+      final selectedOnly = _dateOnly(selectedDate);
+
+      setState(() {
+        recentStartDate = startOnly;
+        // selectedDate가 recentStartDate 이전이면 보정 (날짜만 비교)
+        if (selectedOnly.isBefore(startOnly)) {
+          selectedDate = startOnly.add(const Duration(days: 1));
+        }
+      });
+    } else {
+      // Firestore에 startDate가 없을 때 안내
+      debugPrint('InputPeriodExtraScreen> startDate not found for uid=$uid');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('최근 생리 시작일 정보를 불러오지 못했어요. 생리 시작일 입력 화면에서 먼저 시작일을 저장해 주세요.')),
+        );
+      }
     }
   }
 
@@ -149,17 +187,11 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
         backgroundColor: ColorTheme.subColor,
       ),
     );
+    // 저장 후 다음 화면으로 이동 (인자 전달 없이, 다음 화면에서 Firestore 재조회)
+    if (mounted) {
+      Navigator.pushNamed(context, '/input_ble');
+    }
 
-    Navigator.pushNamed(
-      context,
-      '/input_ble',
-      arguments: {
-        'userId': userId,
-        'recentStartDate': recentStartDate,
-        'selectedEndDate': selectedDate,
-        'isOnMedication': isOnMedication,
-      },
-    );
   } catch (e) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
