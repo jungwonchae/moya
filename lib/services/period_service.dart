@@ -1,8 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+extension _DateHelpers on DateTime {
+  DateTime get d => DateTime(year, month, day); // normalize
+}
+
 class PeriodService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   CollectionReference get _col => _firestore.collection('periods');
+  
 
   /// 날짜만 유지(시간 00:00:00)로 정규화
   DateTime _normalizeDate(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -179,20 +184,16 @@ class PeriodService {
   // 특정 사용자의 최근 생리 기록 가져오기
   Future<Map<String, dynamic>?> getLatestPeriod(String userId) async {
     try {
-      QuerySnapshot snapshot = await _col
+      // 1차: startDate 기준
+      var q = await _col
           .where('userId', isEqualTo: userId)
           .orderBy('startDate', descending: true)
           .limit(1)
           .get();
 
-      if (snapshot.docs.isNotEmpty) {
-        var doc = snapshot.docs.first;
-        return {
-          'periodId': doc.id,
-          ...doc.data() as Map<String, dynamic>
-        };
-      }
-      return null;
+      if (q.docs.isEmpty) return null;
+      final d = q.docs.first;
+      return {'periodId': d.id, ...d.data() as Map<String, dynamic>};
     } catch (e) {
       print('최근 생리 기록 조회 실패: $e');
       return null;
@@ -352,5 +353,28 @@ class PeriodService {
       print('센서 flow 업데이트 실패: $e');
       return false;
     }
+  }
+
+  /// 최신 period의 [startDate..endDate] 날짜들을 모두 리턴
+  Future<List<DateTime>> getLatestPeriodDays(String userId) async {
+    final latest = await getLatestPeriod(userId);
+    if (latest == null) return [];
+
+    final tsStart = latest['startDate'] as Timestamp?;
+    final tsEnd   = latest['endDate']   as Timestamp?;
+
+    final start = tsStart != null ? _normalizeDate(tsStart.toDate()) : null;
+    if (start == null) return [];
+
+    final int periodLen = (latest['periodLength'] as int?) ?? 5;
+    final DateTime end =
+        tsEnd != null ? _normalizeDate(tsEnd.toDate())
+                      : _normalizeDate(start.add(Duration(days: periodLen - 1)));
+
+    final days = <DateTime>[];
+    for (DateTime d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      days.add(_normalizeDate(d));
+    }
+    return days;
   }
 }

@@ -19,6 +19,9 @@ class PeriodCalendar extends StatefulWidget {
   /// 날짜 → 로그 목록 (키는 "연-월-일"만 유지되는 DateTime이어야 함)
   final Map<DateTime, List<DayLog>> events;
 
+  /// 생리 날짜들 (배경색 표시용)
+  final Set<DateTime>? periodDates;
+
   /// 날짜 선택 콜백(선택된 day를 넘겨줌)
   final ValueChanged<DateTime>? onSelected;
 
@@ -28,6 +31,7 @@ class PeriodCalendar extends StatefulWidget {
   const PeriodCalendar({
     super.key,
     required this.events,
+    this.periodDates,
     this.initialMonth,
     this.initialSelected,
     this.onSelected,
@@ -61,6 +65,11 @@ class _PeriodCalendarState extends State<PeriodCalendar> {
     return widget.events[key] ?? const [];
   }
 
+  bool _isPeriodDay(DateTime day) {
+    final key = PeriodCalendar.normalize(day);
+    return widget.periodDates?.contains(key) ?? false;
+  }
+
   void _prevMonth() {
     setState(() {
       _focusedMonth =
@@ -81,8 +90,8 @@ class _PeriodCalendarState extends State<PeriodCalendar> {
   @override
   Widget build(BuildContext context) {
     final logs = _logsOf(_selectedDay);
-    final isStartDay =
-        logs.any((e) => e.title.contains('생리 시작')); // 단순 키워드 체크
+    final isStartDay = logs.any((e) => e.title.contains('생리 시작')); // 단순 키워드 체크
+    final isPeriodDay = _isPeriodDay(_selectedDay);
 
     return Padding(
       padding: widget.padding,
@@ -99,6 +108,7 @@ class _PeriodCalendarState extends State<PeriodCalendar> {
           _MonthGrid(
             focusedMonth: _focusedMonth,
             selected: _selectedDay,
+            periodDates: widget.periodDates,
             onSelect: (d) {
               setState(() => _selectedDay = d);
               widget.onSelected?.call(d);
@@ -129,14 +139,24 @@ class _PeriodCalendarState extends State<PeriodCalendar> {
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
                     child: const Text(
                       '생리 시작일',
                       style: TextStyle(
-                        color: ColorTheme.subColor,
+                        color: ColorTheme.textWhite,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  )
+                else if (isPeriodDay)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    child: const Text(
+                      '생리 기간',
+                      style: TextStyle(
+                        color: ColorTheme.textWhite,
+                        fontSize: 17,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -230,11 +250,13 @@ class _MonthHeader extends StatelessWidget {
 class _MonthGrid extends StatelessWidget {
   final DateTime focusedMonth;
   final DateTime selected;
+  final Set<DateTime>? periodDates;
   final ValueChanged<DateTime> onSelect;
 
   const _MonthGrid({
     required this.focusedMonth,
     required this.selected,
+    this.periodDates,
     required this.onSelect,
   });
 
@@ -284,14 +306,28 @@ class _MonthGrid extends StatelessWidget {
 
             final isToday = sameDay(day, DateTime.now());
             final isSelected = sameDay(day, selected);
+            final isPeriodDay = periodDates?.contains(PeriodCalendar.normalize(day)) ?? false;
 
-            final bg =
-                isSelected ? ColorTheme.subColor : null;
-            final fg = isSelected
-                ? Colors.white
-                : (isToday
-                    ? ColorTheme.subColor
-                    : const Color(0xFF222222));
+            Color? bg;
+            Color fg;
+
+            if (isSelected) {
+              // 선택된 날짜 - 메인 색상
+              bg = ColorTheme.subColor;
+              fg = Colors.white;
+            } else if (isPeriodDay) {
+              // 생리 날짜 - 분홍색 배경
+              bg = ColorTheme.mainColor;
+              fg = Colors.white;
+            } else if (isToday) {
+              // 오늘 날짜 - 테두리만
+              bg = null;
+              fg = ColorTheme.subColor;
+            } else {
+              // 일반 날짜
+              bg = null;
+              fg = const Color(0xFF222222);
+            }
 
             return GestureDetector(
               onTap: () => onSelect(day),
@@ -300,6 +336,9 @@ class _MonthGrid extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: bg,
                   shape: BoxShape.circle,
+                  border: isToday && !isSelected && !isPeriodDay 
+                    ? Border.all(color: ColorTheme.subColor, width: 2)
+                    : null,
                 ),
                 child: Text(
                   '$dayNum',

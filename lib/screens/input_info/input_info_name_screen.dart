@@ -6,6 +6,10 @@ import 'package:moya_app/themes/colortheme.dart';
 import 'package:moya_app/widgets/confirm_button.dart';
 import 'package:moya_app/services/user_service.dart';
 
+// Firebase
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class InputInfoNameScreen extends StatefulWidget {
   @override
   _InputInfoNameScreenState createState() => _InputInfoNameScreenState();
@@ -19,10 +23,12 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
     final userService = context.read<UserService>();
     final name = nameController.text.trim();
     if (name.isEmpty) return;
-
+ 
     setState(() => _isLoading = true);
     try {
-      final docId = await userService.createUser(name: name);
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final docId = await userService.createUserWithUid(uid: uid, name: name);
+
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -37,7 +43,7 @@ class _InputInfoNameScreenState extends State<InputInfoNameScreen> {
       Navigator.pushNamed(
         context,
         '/input_nick',
-        arguments: {'userId': docId, 'name': name},
+        arguments: {'userId': uid, 'name': name},
       );
     } on FirebaseException catch (e) {
       // 에러 메시지는 UI에서
