@@ -12,6 +12,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:moya_app/services/user_service.dart';
 import 'package:moya_app/services/period_service.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
 class HomeScreen extends StatefulWidget {
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -19,7 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   // Firebase에서 가져올 데이터들
-  String userName = 'MOYA';
+  String? name;
   String currentFlow = 'before'; // before, safe, warning, need
   int daysUntilNext = 5;
   bool isOnPeriod = false;
@@ -38,86 +40,50 @@ class _HomeScreenState extends State<HomeScreen> {
   // 로딩 상태
   bool _isLoading = true;
   
-  // 사용자 ID (실제 구현에서는 로그인 시스템에서 가져와야 함)
-  String? userId; // Firebase Auth에서 가져오거나 임시 ID 사용
+  // 사용자 ID
+  String? userId;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _initializeUser();
   }
 
-  /// Firebase에서 사용자 데이터 로드
-  Future<void> _loadUserData() async {
-    if (!mounted) return;
-    
-    setState(() => _isLoading = true);
-
+  // Firebase Auth로부터 현재 사용자 가져오기
+  Future<void> _initializeUser() async {
     try {
-      // Firebase Console의 users 컬렉션에서 실제 문서 ID 사용
-      // 예: 'iT6h4kPdUmmodcF4GRJ4' (Firebase Console에서 확인한 실제 ID)
-      userId = 'iT6h4kPdUmmodcF4GRJ4'; // ← Firebase Console에서 복사한 실제 문서 ID
+      // Firebase Auth에서 현재 로그인된 사용자 가져오기
+      final User? currentUser = FirebaseAuth.instance.currentUser;
       
-      if (userId != null) {
-        // UserService를 사용해서 사용자 이름 가져오기
-        final fetchedUserName = await _userService.getUserName(userId!);
-        
-        // PeriodService에서 생리 정보 가져오기
-        final results = await Future.wait([
-          _periodService.getLatestFlow(userId!),
-          _periodService.getLatestPeriod(userId!),
-        ]);
-
-        final fetchedFlow = results[0] as String?;
-        final latestPeriod = results[1] as Map<String, dynamic>?;
-
-        if (mounted) {
-          setState(() {
-            // UserService에서 가져온 이름 사용, 없으면 'MOYA' 기본값
-            userName = fetchedUserName ?? 'MOYA';
-            currentFlow = fetchedFlow ?? 'before';
-            padStatus = _convertFlowToPadStatus(currentFlow);
-            
-            // 다음 생리까지 남은 일수 계산
-            if (latestPeriod != null) {
-              _calculateDaysUntilNext(latestPeriod);
-            }
-            
-            _isLoading = false;
-          });
-          
-          print('사용자 데이터 로드 완료: 이름=$userName, 상태=$currentFlow');
-        }
+      if (currentUser != null) {
+        userId = currentUser.uid;
+        print('현재 사용자 ID: $userId');
+        await _loadUserData();
       } else {
-        // userId가 없는 경우 기본값 사용
-        if (mounted) {
-          setState(() {
-            userName = 'MOYA';
-            currentFlow = 'before';
-            padStatus = PadStatus.before;
-            _isLoading = false;
-          });
-        }
-      }
-    } on FirebaseException catch (e) {
-      print('Firebase 오류: ${e.code} ${e.message}');
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('데이터 로드 실패: ${e.message}')),
-        );
+        print('로그인된 사용자가 없음');
+        // 로그인 화면으로 이동하거나 익명 로그인 처리
+        await _handleNoUser();
       }
     } catch (e) {
-      print('사용자 데이터 로드 실패: $e');
-      if (mounted) {
-        setState(() {
-          // 오류 발생 시 기본값 사용
-          userName = 'MOYA';
-          currentFlow = 'before'; 
-          padStatus = PadStatus.before;
-          _isLoading = false;
-        });
+      print('사용자 초기화 실패: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+  // 로그인되지 않은 사용자 처리
+  Future<void> _handleNoUser() async {
+    try {
+      // 익명 로그인 시도
+      final UserCredential result = await FirebaseAuth.instance.signInAnonymously();
+      userId = result.user?.uid;
+      
+      if (userId != null) {
+        print('익명 사용자로 로그인: $userId');
+        await _loadUserData();
       }
+    } catch (e) {
+      print('익명 로그인 실패: $e');
+      setState(() => _isLoading = false);
+      // 오류 처리 또는 로그인 화면으로 이동
     }
   }
 
@@ -174,6 +140,99 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<bool> _checkFirebaseConnection() async {
+    try {
+      await FirebaseFirestore.instance.collection('_ping').limit(1).get();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _createNewUserDocument() async {
+    if (userId == null) return;
+    await FirebaseFirestore.instance.collection('users').doc(userId).set({
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> _loadUserData() async {
+  if (!mounted || userId == null) return;
+  
+  setState(() => _isLoading = true);
+
+  try {
+    // Firebase 연결 확인
+    final isConnected = await _checkFirebaseConnection();
+    if (!isConnected) {
+      throw Exception('Firebase 연결 실패');
+    }
+
+    print('사용자 데이터 로딩 시작: $userId');
+    
+    // 사용자 문서가 존재하는지 확인
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .get();
+    
+    if (!userDoc.exists) {
+      print('사용자 문서가 존재하지 않음. 새로 생성...');
+      // 새 사용자 문서 생성
+      await _createNewUserDocument();
+    }
+
+    // UserService를 사용해서 사용자 이름 가져오기
+    final fetchedUserName = await _userService.getUserName(userId!);
+    
+    // PeriodService에서 생리 정보 가져오기
+    final results = await Future.wait([
+      _periodService.getLatestFlow(userId!),
+      _periodService.getLatestPeriod(userId!),
+    ]);
+
+    final fetchedFlow = results[0] as String?;
+    final latestPeriod = results[1] as Map<String, dynamic>?;
+
+    if (mounted) {
+      setState(() {
+        name = fetchedUserName;
+        currentFlow = fetchedFlow ?? 'before';
+        padStatus = _convertFlowToPadStatus(currentFlow);
+        
+        if (latestPeriod != null) {
+          _calculateDaysUntilNext(latestPeriod);
+        }
+        
+        _isLoading = false;
+      });
+      
+      print('사용자 데이터 로드 완료: 이름=$name, 상태=$currentFlow');
+    }
+  } catch (e) {
+    print('사용자 데이터 로드 실패: $e');
+    if (mounted) {
+      setState(() {
+        // 이름은 강제로 기본값을 넣지 않음 (null 유지)
+        currentFlow = 'before';
+        padStatus = PadStatus.before;
+        _isLoading = false;
+      });
+      
+      // 사용자에게 오류 알림
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('데이터를 불러올 수 없습니다. 인터넷 연결을 확인해주세요.'),
+          action: SnackBarAction(
+            label: '다시 시도',
+            onPressed: _loadUserData,
+          ),
+        ),
+      );
+    }
+  }
+}
+
   /// PadStatus를 Flow로 변환
   String _convertPadStatusToFlow(PadStatus status) {
     switch (status) {
@@ -204,9 +263,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // ↓ 디버그용 플래그
+  final bool _mockBluetoothConnected = true;
+
   @override
   Widget build(BuildContext context) {
     final bluetooth = context.watch<BluetoothProvider>();
+
+    final bool isConnectedForUI =
+        _mockBluetoothConnected ? true : bluetooth.isConnected;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -222,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     GreetingHeader(
-                      userName: userName, // Firebase에서 가져온 실제 사용자 이름
+                      userName: name ?? '', // Firebase에서 가져온 실제 사용자 이름
                       height: 190,
                       dropAsset: 'assets/icons/moya.svg',
                       onAiTap: () => Navigator.pushNamed(context, '/ondevice'),
@@ -248,7 +313,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             Align(
                               alignment: Alignment.centerLeft,
                               child: BluetoothStatusChip(
-                                isConnected: bluetooth.isConnected,
+                                // ↓ 여기서 강제로 true 사용
+                                  isConnected: isConnectedForUI,
+                                // isConnected: bluetooth.isConnected,
                                 onTap: () => Navigator.pushNamed(context, '/setting_bluetooth'),
                               ),
                             ),
@@ -263,7 +330,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Center(
                         child: PeriodWidget(
                           status: padStatus, // Firebase에서 가져온 상태
-                          showDemoToggle: true, // 개발 중에는 true, 출시 시 false
+                          showDemoToggle: false, // 개발 중에는 true, 출시 시 false
                           onStatusChanged: _onStatusChanged,
                           onStartTap: () => Navigator.pushNamed(context, '/input_recent'),
                           changeCount: changeCount,
@@ -288,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('디버그 정보:', style: TextStyle(fontWeight: FontWeight.bold)),
-                              Text('사용자: $userName'),
+                              Text('사용자: ${name ?? '(이름 없음)'}'),
                               Text('현재 상태: $currentFlow'),
                               Text('메시지: ${_periodService.getFlowMessage(currentFlow)}'),
                               Text('다음까지: ${daysUntilNext}일'),

@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:moya_app/themes/colortheme.dart';
 
+import 'package:moya_app/widgets/lamp_widget.dart';
+import 'package:moya_app/widgets/wearable_widget.dart';
+
+
+
 class UsageScreensContainer extends StatefulWidget {
   final bool isFromOnboarding;
   
@@ -166,10 +171,7 @@ class _UsageFirstPage extends StatelessWidget {
                   maxWidth: 300,
                   maxHeight: 400,
                 ),
-                child: SvgPicture.asset(
-                  'assets/images/app_hw.svg',
-                  fit: BoxFit.contain,
-                ),
+                child: const WearableDeviceWidget(), // ✅ SVG 대신 위젯 넣기
               ),
             ),
           ),
@@ -222,10 +224,7 @@ class _UsageSecondPage extends StatelessWidget {
                   maxWidth: 300,
                   maxHeight: 400,
                 ),
-                child: SvgPicture.asset(
-                  'assets/images/app_hw.svg',
-                  fit: BoxFit.contain,
-                ),
+                child: LampWidget(),
               ),
             ),
           ),
@@ -274,12 +273,12 @@ class _UsageThirdPage extends StatelessWidget {
           Expanded(
             child: Center(
               child: Container(
-                constraints: BoxConstraints(
+                constraints: const BoxConstraints(
                   maxWidth: 300,
                   maxHeight: 400,
                 ),
-                child: SvgPicture.asset(
-                  'assets/images/app_hw.svg', // 기존 파일이 있다면 해당 경로
+                child: Image.asset(     // ← SvgPicture.asset → Image.asset
+                  'assets/images/app_hw.png',
                   fit: BoxFit.contain,
                 ),
               ),
