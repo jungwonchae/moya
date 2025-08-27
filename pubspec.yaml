@@ -16,6 +16,7 @@ dependencies:
   permission_handler: ^11.0.1
   shared_preferences: ^2.2.0
   camera: ^0.10.5+5
+  http: ^1.2.1 #chatGPT
   image_picker: ^1.0.4
   path_provider: ^2.1.1
   sqflite: ^2.3.0
