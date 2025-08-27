@@ -61,15 +61,6 @@ class _InputPeriodDaysScreenState extends State<InputPeriodDaysScreen> {
     return "${d.year}년 ${d.month}월 ${d.day}일";
   }
   
-  // 플랫폼별 날짜 선택
-  Future<void> _pickDateAdaptive() async {
-    if (recentStartDate == null) return;
-    
-    // 날짜 함수
-  String formatKoreanDate(DateTime d) {
-    return "${d.year}년 ${d.month}월 ${d.day}일";
-  }
-
   // 플랫폼별 날짜 선택 (iOS: CupertinoDatePicker, Android: 커스텀 모달)
   Future<void> _pickDateAdaptive() async {
     if (Platform.isIOS) {
