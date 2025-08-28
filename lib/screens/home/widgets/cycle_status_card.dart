@@ -26,7 +26,7 @@ class CycleStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title   = isOnPeriod ? '생리중이에요!' : '곧 생리주기가 돌아와요!';
-    final subtitle = isOnPeriod ? '$days일 남음' : '${days}일뒤 시작';
+    final subtitle = isOnPeriod ? '종료까지 $days일 남음' : '${days}일뒤 시작';
 
     return GestureDetector(
       onTap: onTap,

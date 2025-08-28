@@ -6,7 +6,7 @@ import 'package:moya_app/widgets/confirm_button.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:moya_app/services/period_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp, FirebaseException;
+import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
 
 class InputPeriodRecentScreen extends StatefulWidget {
   @override
@@ -14,10 +14,78 @@ class InputPeriodRecentScreen extends StatefulWidget {
 }
 
 class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
-  final _service = PeriodService();
+  final PeriodService _service = PeriodService();
   bool _saving = false;
+  bool _loading = true;
 
   DateTime selectedDate = DateTime.now().subtract(const Duration(days: 7));
+  
+  // 수정 모드인지 확인
+  bool isEditMode = false;
+  // 홈에서 온 간단 입력 모드인지 확인
+  bool isQuickInputMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadExistingData();
+    });
+  }
+
+  Future<void> _loadExistingData() async {
+    final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
+    
+    print('[RecentScreen] Received arguments: $args');
+    
+    isEditMode = args['isEdit'] == true;
+    isQuickInputMode = args['quickInput'] == true; // 홈에서 온 간단 입력 모드
+    
+    print('[RecentScreen] Mode - isEditMode: $isEditMode, isQuickInputMode: $isQuickInputMode');
+    
+    if (isEditMode || isQuickInputMode) {
+      final periodId = args['periodId'] as String?;
+      
+      // periodId가 없으면 최신 period 찾기
+      String? targetPeriodId = periodId;
+      if (targetPeriodId == null || targetPeriodId.isEmpty) {
+        final userId = args['userId'] as String?;
+        if (userId != null) {
+          final latestPeriod = await _service.getLatestPeriod(userId);
+          targetPeriodId = latestPeriod?['periodId'] as String?;
+          print('[RecentScreen] Found latest periodId: $targetPeriodId');
+        }
+      }
+      
+      if (targetPeriodId != null) {
+        try {
+          final data = await _service.getPeriodData(targetPeriodId);
+          final existingDate = data['startDate'];
+          DateTime? parsedDate;
+          
+          // Timestamp 처리
+          if (existingDate is Timestamp) {
+            parsedDate = existingDate.toDate();
+          } else if (existingDate is DateTime) {
+            parsedDate = existingDate;
+          }
+          
+          if (parsedDate != null && mounted) {
+            setState(() {
+              selectedDate = parsedDate!;
+            });
+          }
+          print('[RecentScreen] Loaded existing date: $parsedDate');
+        } catch (e) {
+          print('[RecentScreen] Error loading existing data: $e');
+        }
+      }
+    }
+    
+    if (mounted) {
+      setState(() => _loading = false);
+    }
+  }
 
   // 날짜 함수
   String formatKoreanDate(DateTime d) {
@@ -235,63 +303,103 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
     );
   }
 
-  // ✅ Firebase에 시작일 저장
   Future<void> _onNext() async {
     if (_saving) return;
-    FocusScope.of(context).unfocus();
 
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    // 이전 화면에서 값 받기
+    final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
+    final userId = args['userId'] as String?;
+    final nick = args['nick'] as String?;
+    String? periodId = args['periodId'] as String?;
 
-    final userId   = (args?['userId'] as String?) ?? '';
-    String? periodId = args?['periodId'] as String?;
-    final nick     = args?['nick'] as String?;
-
-    if (userId.isEmpty) {
+    if (userId == null || userId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('사용자 정보를 찾을 수 없어요.'), backgroundColor: Colors.red),
       );
-      debugPrint('[RecentScreen] missing userId. args=$args');
+      print('[RecentScreen] missing userId. args=$args');
       return;
     }
 
     setState(() => _saving = true);
     try {
+      if (isQuickInputMode) {
+        // 홈에서 온 간단 입력 모드: 최신 period를 찾아서 flow 상태 업데이트
+        final latestPeriod = await _service.getLatestPeriod(userId);
+        
+        if (latestPeriod != null && latestPeriod['periodId'] != null) {
+          // 기존 period가 있으면 flow 상태와 startDate만 업데이트
+          final existingPeriodId = latestPeriod['periodId'] as String;
+          await _service.updatePeriodData(existingPeriodId, {
+            'startDate': selectedDate,
+            'flow': 'during', // 생리 시작으로 flow 상태 변경
+            'updatedAt': DateTime.now(),
+          });
+          print('[RecentScreen] Updated period flow status: $existingPeriodId, startDate: $selectedDate, flow: during');
+        } else {
+          // 기존 period가 없으면 새로 생성 (첫 사용자의 경우)
+          periodId = await _service.createDraftWithNick(
+            userId: userId,
+            nick: (nick ?? '알림'),
+          );
+          await _service.updatePeriodData(periodId, {
+            'startDate': selectedDate,
+            'flow': 'during',
+          });
+          print('[RecentScreen] Created new period: $periodId with startDate: $selectedDate, flow: during');
+        }
+
+        // 홈으로 돌아가기
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('생리 시작이 기록되었습니다.'),
+            backgroundColor: ColorTheme.mainColor,
+          ),
+        );
+        
+        // 모든 화면을 제거하고 홈으로 이동 (홈 화면이 새로 빌드됨)
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/home',
+          (Route<dynamic> route) => false,
+        );
+        return;
+      }
+      
       if (periodId == null || periodId.isEmpty) {
         // 드래프트가 없으면 새로 생성
         periodId = await _service.createDraftWithNick(
           userId: userId,
           nick: (nick ?? '알림'),
         );
-        debugPrint('[RecentScreen] draft created: $periodId');
+        print('[RecentScreen] draft created: $periodId');
       }
 
-      // ✅ Firestore에 startDate 저장
+      // Firebase에 startDate 저장
       await _service.updatePeriodData(periodId, {
-        'startDate': Timestamp.fromDate(selectedDate),
+        'startDate': selectedDate,
       });
-      debugPrint('[RecentScreen] startDate saved: $selectedDate');
+      print('[RecentScreen] startDate saved: $selectedDate for periodId=$periodId');
 
-      // 다음 화면으로 이동
-      Navigator.pushNamed(
-        context,
-        '/input_cycle',
-        arguments: {
-          'userId': userId,
-          'periodId': periodId,
-          'nick': nick,
-          'recentStartDate': selectedDate,
-        },
-      );
-    } on FirebaseException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('저장 실패: ${e.message ?? e.code}'), backgroundColor: Colors.red),
-      );
-      debugPrint('[RecentScreen] FirebaseException: ${e.code} ${e.message}');
+      if (isEditMode) {
+        // 수정 모드면 뒤로가기
+        Navigator.pop(context);
+      } else {
+        // 일반 모드면 다음 화면으로
+        Navigator.pushNamed(
+          context,
+          '/input_cycle',
+          arguments: {
+            'userId': userId,
+            'periodId': periodId,
+            'nick': nick,
+            'recentStartDate': selectedDate,
+          },
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('저장에 실패했습니다. 다시 시도해 주세요.'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('저장 실패. 다시 시도해 주세요.'), backgroundColor: Colors.red),
       );
-      debugPrint('[RecentScreen] Unknown error: $e');
+      print('[RecentScreen] error: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -299,6 +407,25 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(ColorTheme.mainColor),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -324,7 +451,8 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
             ),
             const SizedBox(height: 20),
             Text(
-              '최근 생리가\n시작된 날을 알려주세요',
+              isQuickInputMode ? '생리가 시작되었나요?' : 
+              (isEditMode ? '최근 생리 시작일을\n수정해주세요' : '최근 생리가\n시작된 날을 알려주세요'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 24,
@@ -335,7 +463,8 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '마지막으로 생리가 시작된 날짜를 선택해주세요',
+              isQuickInputMode ? '오늘 날짜로 설정하거나 다른 날짜를 선택해주세요' :
+              (isEditMode ? '날짜를 다시 선택해주세요' : '마지막으로 생리가 시작된 날짜를 선택해주세요'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -380,10 +509,10 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
               ),
             ),
 
-            const Spacer(),
+            const Spacer(),            
 
             ConfirmButton(
-              text: '다음',
+              text: isQuickInputMode ? '저장' : (isEditMode ? '저장' : '다음'),
               isEnabled: !_saving,
               onPressed: _saving ? null : _onNext,
             ),

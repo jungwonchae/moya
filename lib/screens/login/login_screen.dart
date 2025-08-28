@@ -132,40 +132,41 @@ class LoginScreen extends StatelessWidget {
                   Spacer(),
                   
                   // 회원가입 버튼
-                  Container(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        // 직접 UsageFirstScreen으로 이동하면서 파라미터 전달
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => UsageScreensContainer(isFromOnboarding: true),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFFFF85B4),
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        '회원가입 하기',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
+                  // Container(
+                  //   width: double.infinity,
+                  //   child: ElevatedButton(
+                  //     onPressed: () {
+                  //       // 직접 UsageFirstScreen으로 이동하면서 파라미터 전달
+                  //       Navigator.push(
+                  //         context,
+                  //         MaterialPageRoute(
+                  //           builder: (context) => UsageScreensContainer(isFromOnboarding: true),
+                  //         ),
+                  //       );
+                  //     },
+                  //     style: ElevatedButton.styleFrom(
+                  //       backgroundColor: Color(0xFFFF85B4),
+                  //       foregroundColor: Colors.white,
+                  //       padding: EdgeInsets.symmetric(vertical: 16),
+                  //       shape: RoundedRectangleBorder(
+                  //         borderRadius: BorderRadius.circular(12),
+                  //       ),
+                  //       elevation: 0,
+                  //     ),
+                  //     child: Text(
+                  //       '회원가입 하기',
+                  //       style: TextStyle(
+                  //         fontSize: 16,
+                  //         fontWeight: FontWeight.w600,
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                   
-                  SizedBox(height: 15),
+                  // SizedBox(height: 15),
                   
-                  // 비회원 시작 버튼 (익명 로그인 연결)
+                  // 비회원 시작 버튼 (익명 로그인 연결) -> MVP 로 회원가입 없애고 일단 비회원 로그인만 받기
+
                   SizedBox(
                     width: double.infinity,
                     child: TextButton(
@@ -200,18 +201,20 @@ class LoginScreen extends StatelessWidget {
                           );
                         }
                       },
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Color(0xFFFF85B4),  // 회원가입 버튼과 같은 배경색
+                        foregroundColor: Colors.white,       // 회원가입 버튼과 같은 텍스트 색상
+                        padding: EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
+                        elevation: 0,
                       ),
                       child: Text(
-                        '비회원 시작',
+                        '시작하기', // 비회원 시작하기로 추후에 변경
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,  // 회원가입 버튼과 같은 폰트 굵기
                         ),
                       ),
                     ),
