@@ -20,6 +20,9 @@ class BleService {
   final Guid _txGuid  = Guid(_nusTx);
   final Guid _rxGuid  = Guid(_nusRx);
 
+  // 마지막으로 반영한 flow
+  String? _prevFlow;
+
   // ---- 단일 기기 상태 ----
   bool _isConnected = false;
   BluetoothDevice? _device;
@@ -224,38 +227,91 @@ class BleService {
   // 생리량 계산
   void _analyzeAndUpdate() {
     if (_currentPeriodId == null) return;
-    final prev = _recent[_recent.length-2];
-    final cur  = _recent[_recent.length-1];
+    final prev = _recent[_recent.length - 2];
+    final cur  = _recent[_recent.length - 1];
 
+    // 0,0,0 은 무조건 safe
+    if (cur.every((e) => e == 0)) {
+      if (DateTime.now().difference(_lastFlowAt).inSeconds >= 10) {
+        _updateFlow('safe', 'all_zero');
+      }
+      return;
+    }
+
+    // 변화량 기반 판단
     int changed = 0;
-    for (int i=0;i<3;i++) {
-      if ((cur[i]-prev[i]).abs() >= _changeThreshold) changed++;
+    for (int i = 0; i < 3; i++) {
+      if ((cur[i] - prev[i]).abs() >= _changeThreshold) changed++;
     }
 
     String? flow;
-    if (changed == 0) flow = 'safe';
-    else if (changed == 2) flow = 'warning';
+    if (changed == 2) flow = 'warning';
     else if (changed >= 3) flow = 'need';
+    // changed == 0 인데 값이 0,0,0이 아닌 경우 → 상태 유지 (업데이트 안 함)
 
     if (flow != null && DateTime.now().difference(_lastFlowAt).inSeconds >= 10) {
       _updateFlow(flow, 'sensor_change_$changed');
     }
   }
 
+
+  // ---------- flow update하면서 전이 체크 ----------
   Future<void> _updateFlow(String flow, String reason) async {
     if (_currentPeriodId == null) return;
     try {
+      // --- 1) 전이 감지: warning/need -> safe ---
+      final wasWarningOrNeed = (_prevFlow == 'warning' || _prevFlow == 'need');
+      final isNowSafe = (flow == 'safe');
+
       await FirebaseFirestore.instance.collection('periods').doc(_currentPeriodId).update({
         'flow': flow,
         'lastSensorUpdate': FieldValue.serverTimestamp(),
         'updateReason': reason,
         'lastSensorData': _recent.isNotEmpty ? _recent.last : [0,0,0],
       });
+
+      // --- 2) 일일 통계 업데이트 (전이가 safe일 때만) ---
+      if (wasWarningOrNeed && isNowSafe) {
+        await _bumpDailyChangeAndMarkTime(_currentPeriodId!);
+      }
+
+      _prevFlow = flow;            // ← 이번 반영 상태를 저장해 다음 전이 체크에 사용
       _lastFlowAt = DateTime.now();
       debugPrint('[BleService] flow -> $flow ($reason)');
     } catch (e) {
       debugPrint('[BleService] flow update fail: $e');
     }
+  }
+
+  // BleService 내부: 오늘 날짜 키와 통계 업데이트 로직
+  String _todayKey() {
+    final now = DateTime.now();
+    return '${now.year.toString().padLeft(4,'0')}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}';
+  }
+
+  // periods/{periodId}/daily/{YYYY-MM-DD} 문서에 changeCount++, lastChangeAt 업데이트
+  Future<void> _bumpDailyChangeAndMarkTime(String periodId) async {
+    final dayId = _todayKey();
+    final ref = FirebaseFirestore.instance
+        .collection('periods')
+        .doc(periodId)
+        .collection('daily')
+        .doc(dayId);
+
+    await FirebaseFirestore.instance.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) {
+        tx.set(ref, {
+          'changeCount': 1,
+          'lastChangeAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        tx.update(ref, {
+          'changeCount': FieldValue.increment(1),
+          'lastChangeAt': FieldValue.serverTimestamp(),
+        });
+      }
+    });
   }
 
   // ---------- 연결/워치독 ----------
