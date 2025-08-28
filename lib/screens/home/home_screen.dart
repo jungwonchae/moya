@@ -56,6 +56,10 @@ class _HomeScreenState extends State<HomeScreen> {
   int _todayChangeCount = 0;
   String _lastChangeText = '-';
 
+  // ===== 알림 뱃지(읽지 않은 개수) =====
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _unreadSub;
+  int _unreadCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _bleConnectionSub?.cancel();
     _sensorDataSub?.cancel();
     _dailySub?.cancel();
+    _unreadSub?.cancel();
     super.dispose();
   }
 
@@ -117,6 +122,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _subscribePeriodDoc(periodId); // UI는 실시간 반영만
         _subscribeTodayStats(periodId); // 오늘자 교체 현황 구독
       }
+
+      // 알림 뱃지 구독 시작
+      _subscribeUnreadBadge();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -309,6 +317,24 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // 읽지 않은 알림 개수 구독 (배지 표시용)
+  void _subscribeUnreadBadge() {
+    if (userId == null) return;
+    _unreadSub?.cancel();
+    _unreadSub = FirebaseFirestore.instance
+        .collection('notifications')
+        .doc(userId)
+        .collection('items')
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .listen((snap) {
+      if (!mounted) return;
+      setState(() {
+        _unreadCount = snap.docs.length;
+      });
+    });
+  }
+
   // 사용자가 PeriodWidget에서 수동으로 상태 바꿀 경우(테스트용)
   void _onStatusChanged(PadStatus s) async {
     setState(() => padStatus = s);
@@ -345,12 +371,31 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      GreetingHeader(
-                        userName: name ?? '',
-                        height: 190,
-                        dropAsset: 'assets/icons/moya.svg',
-                        onAiTap: () => Navigator.pushNamed(context, '/ondevice'),
-                        onBellTap: () => Navigator.pushNamed(context, '/notification'),
+                      // 헤더 + 우상단 알림 배지 오버레이
+                      Stack(
+                        children: [
+                          GreetingHeader(
+                            userName: name ?? '',
+                            height: 190,
+                            dropAsset: 'assets/icons/moya.svg',
+                            onAiTap: () => Navigator.pushNamed(context, '/ondevice'),
+                            onBellTap: () => Navigator.pushNamed(context, '/notification'),
+                          ),
+                          if (_unreadCount > 0)
+                            Positioned(
+                              // bell 아이콘 위치에 맞춰 정확히 조정
+                              top: 52, // SafeArea + padding 고려
+                              right: 20, // bell 아이콘의 오른쪽 위 모서리 근처
+                               child: Container(
+                                width: 12,
+                                height: 12,    
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF3B30), // iOS red
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
 
                       Transform.translate(

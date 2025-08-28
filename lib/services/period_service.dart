@@ -12,6 +12,7 @@ class PeriodService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _noti = NotificationService();
   CollectionReference get _col => _firestore.collection('periods');
+  
 
   /// 날짜만 유지(시간 00:00:00)로 정규화
   DateTime _normalizeDate(DateTime d) => DateTime(d.year, d.month, d.day);
