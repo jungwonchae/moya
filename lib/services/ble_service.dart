@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:moya_app/services/notification_service.dart';
 
 class BleService {
   // ---- 싱글톤 ----
@@ -245,8 +246,32 @@ class BleService {
     }
 
     String? flow;
-    if (changed == 2) flow = 'warning';
-    else if (changed >= 3) flow = 'need';
+    if (changed == 2) {
+      flow = 'warning';
+    } else if (changed >= 3) {
+      flow = 'need';
+      FirebaseFirestore.instance
+          .collection('periods')
+          .doc(_currentPeriodId)
+          .get()
+          .then((ps) {
+            if (ps.exists) {
+              final nick = (ps['nick'] as String?) ?? 'MOYA';
+              final userId = ps['userId'] as String?;
+              if (userId != null) {
+                NotificationService().notifyNeedFlowSplit(
+                  userId: userId,
+                  nick: nick,
+                  message: '지금 상태에서 바로 교체하는 걸 추천해요',
+                  relatedData: {
+                    'periodId': _currentPeriodId,
+                    'recommendedInterval': '3~4시간',
+                  },
+                );
+              }
+        }
+      });
+    }
     // changed == 0 인데 값이 0,0,0이 아닌 경우 → 상태 유지 (업데이트 안 함)
 
     if (flow != null && DateTime.now().difference(_lastFlowAt).inSeconds >= 10) {
