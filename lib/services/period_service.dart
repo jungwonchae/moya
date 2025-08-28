@@ -1,6 +1,8 @@
+// lib/services/period_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'notification_service.dart';
-
+import 'package:flutter/foundation.dart';
+import 'package:get/get.dart';
 
 extension _DateHelpers on DateTime {
   DateTime get d => DateTime(year, month, day); // normalize
@@ -10,49 +12,77 @@ class PeriodService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _noti = NotificationService();
   CollectionReference get _col => _firestore.collection('periods');
-  
 
   /// 날짜만 유지(시간 00:00:00)로 정규화
   DateTime _normalizeDate(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  // ============== 내부 헬퍼: 최신 period 문서 ref 찾기 ==============
+  Future<DocumentReference?> _latestPeriodRef(String userId) async {
+    // startDate 기준 최신 1개 (없으면 createdAt 기준으로 한번 더 시도)
+    QuerySnapshot q = await _col
+        .where('userId', isEqualTo: userId)
+        .orderBy('startDate', descending: true)
+        .limit(1)
+        .get();
+
+    if (q.docs.isNotEmpty) return q.docs.first.reference;
+
+    // fallback: createdAt 기준
+    QuerySnapshot q2 = await _col
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(1)
+        .get();
+
+    if (q2.docs.isNotEmpty) return q2.docs.first.reference;
+
+    return null;
+  }
+
+  // ============== 센서 최종 업데이트(권장): userId로 최신 문서 flow 수정 ==============
+  Future<void> updateLatestFlowByUserId(String userId, String flow) async {
+    final ref = await _latestPeriodRef(userId);
+    if (ref == null) {
+      // 최신 문서가 없다면, 초안(draft)을 만들어 flow만 넣을 수도 있음(선택)
+      // 여기서는 에러로 처리
+      debugPrint('[PeriodService] latest period not found for $userId');
+      throw Exception('latest period not found for $userId');
+    }
+
+    await ref.set({
+      'flow': flow,
+      'flowUpdatedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    debugPrint('[PeriodService] updateLatestFlowByUserId OK: userId=$userId flow=$flow doc=${ref.id}');
+  }
 
   /// 생리 주기 상태 계산 함수 (flow로 반환: before, need, safe, warning)
   String _calculateFlow({
     required DateTime startDate,
     DateTime? endDate,
     int? cycleLength,
-    String? sensorStatus, // 센서 상태 (나중에 연결할 예정)
+    String? sensorStatus, // 센서 상태가 있으면 우선
   }) {
     final now = DateTime.now();
-    
-    // 센서 데이터가 있으면 우선 적용 (나중에 구현)
+
     if (sensorStatus != null) {
-      return sensorStatus; // 'safe', 'warning', 'need' 중 하나
+      return sensorStatus; // 'safe' | 'warning' | 'need'
     }
-    
-    // 센서 데이터가 없으면 생리 예상일 기산으로 계산
+
     if (endDate != null) {
-      // 이전 생리 종료일이 있는 경우: 다음 생리 예상일 계산
       final avgCycle = cycleLength ?? 28;
       final nextPeriodDate = endDate.add(Duration(days: avgCycle));
       final daysUntilNextPeriod = nextPeriodDate.difference(now).inDays;
-      
-      if (daysUntilNextPeriod > 3) {
-        return 'before'; // 아직 시작 전
-      } else {
-        // 생리 예상일이 가까워지면 기본적으로 safe 상태
-        // 실제로는 센서 데이터로 판단
-        return 'safe'; 
-      }
+
+      if (daysUntilNextPeriod > 3) return 'before';
+      return 'safe'; // 센서 없을 때 기본 추정
     } else {
-      // 종료일 정보가 없는 경우: 시작일로부터 추정
       final daysSinceStart = now.difference(startDate).inDays;
       final avgCycle = cycleLength ?? 28;
-      
-      if (daysSinceStart < avgCycle - 5) {
-        return 'before'; // 다음 생리까지 여유
-      } else {
-        return 'safe'; // 기본값
-      }
+      if (daysSinceStart < avgCycle - 5) return 'before';
+      return 'safe';
     }
   }
 
@@ -66,38 +96,37 @@ class PeriodService {
     bool? isOnMedication,
     String? flow, // 직접 지정하거나 자동 계산
     String? nick,
-    String? sensorStatus, // 센서 상태 (나중에 추가)
+    String? sensorStatus, // 센서 상태
   }) async {
     try {
       final normalizedStart = _normalizeDate(startDate);
       final normalizedEnd = endDate != null ? _normalizeDate(endDate) : null;
-      
-      // flow가 지정되지 않았으면 자동 계산
-      final calculatedFlow = flow ?? _calculateFlow(
-        startDate: normalizedStart,
-        endDate: normalizedEnd,
-        cycleLength: cycleLength,
-        sensorStatus: sensorStatus,
-      );
 
-      DocumentReference periodDoc = await _col.add({
+      final calculatedFlow = flow ??
+          _calculateFlow(
+            startDate: normalizedStart,
+            endDate: normalizedEnd,
+            cycleLength: cycleLength,
+            sensorStatus: sensorStatus,
+          );
+
+      final doc = await _col.add({
         'userId': userId,
         'startDate': Timestamp.fromDate(normalizedStart),
         'endDate': normalizedEnd != null ? Timestamp.fromDate(normalizedEnd) : null,
         'cycleLength': cycleLength ?? 28,
         'periodLength': periodLength ?? 5,
         'isOnMedication': isOnMedication ?? false,
-        'flow': calculatedFlow, // before, need, safe, warning
+        'flow': calculatedFlow,
         if (nick != null && nick.trim().isNotEmpty) 'nick': nick.trim(),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      print('생리 정보 저장 성공! Period ID: ${periodDoc.id}, Flow: $calculatedFlow');
-      return periodDoc.id;
-
+      debugPrint('[PeriodService] savePeriodData OK: id=${doc.id} flow=$calculatedFlow');
+      return doc.id;
     } catch (e) {
-      print('생리 정보 저장 실패: $e');
+      debugPrint('[PeriodService] savePeriodData ERR: $e');
       return null;
     }
   }
@@ -108,13 +137,12 @@ class PeriodService {
     required DateTime recentStartDate,
     required DateTime selectedEndDate,
     bool? isOnMedication,
-    String? sensorStatus, // 센서 상태 (나중에 추가)
+    String? sensorStatus,
   }) async {
     try {
       final start = _normalizeDate(recentStartDate);
       final end = _normalizeDate(selectedEndDate);
-      
-      // flow 계산
+
       final flow = _calculateFlow(
         startDate: start,
         endDate: end,
@@ -128,7 +156,6 @@ class PeriodService {
           .get();
 
       if (qs.docs.isNotEmpty) {
-        // 기존 문서 업데이트
         final doc = qs.docs.first.reference;
         await doc.set({
           'endDate': Timestamp.fromDate(end),
@@ -138,7 +165,6 @@ class PeriodService {
         }, SetOptions(merge: true));
         return doc.id;
       } else {
-        // 새 문서 생성
         final doc = await _col.add({
           'userId': userId,
           'startDate': Timestamp.fromDate(start),
@@ -151,10 +177,10 @@ class PeriodService {
         return doc.id;
       }
     } on FirebaseException catch (e) {
-      print('[PeriodService] Firestore error: ${e.code} ${e.message}');
+      debugPrint('[PeriodService] upsertExtra Firestore error: ${e.code} ${e.message}');
       rethrow;
     } catch (e) {
-      print('[PeriodService] unknown error: $e');
+      debugPrint('[PeriodService] upsertExtra unknown error: $e');
       rethrow;
     }
   }
@@ -164,30 +190,20 @@ class PeriodService {
     required String userId,
     required String nick,
   }) async {
-    try {
-      final data = {
-        'userId': userId,
-        'nick': nick.trim(),
-        'flow': 'safe', // 기본값
-        'createdAt': FieldValue.serverTimestamp(),
-      };
-
-      final doc = await _col.add(data);
-      print('[PeriodService] draft created: ${doc.id} for user=$userId nick=$nick');
-      return doc.id;
-    } on FirebaseException catch (e) {
-      print('[PeriodService] Firestore error: ${e.code} ${e.message}');
-      rethrow;
-    } catch (e) {
-      print('[PeriodService] unknown error: $e');
-      rethrow;
-    }
+    final data = {
+      'userId': userId,
+      'nick': nick.trim(),
+      'flow': 'safe',
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+    final doc = await _col.add(data);
+    debugPrint('[PeriodService] draft created: ${doc.id} for user=$userId nick=$nick');
+    return doc.id;
   }
 
   // 특정 사용자의 최근 생리 기록 가져오기
   Future<Map<String, dynamic>?> getLatestPeriod(String userId) async {
     try {
-      // 1차: startDate 기준
       var q = await _col
           .where('userId', isEqualTo: userId)
           .orderBy('startDate', descending: true)
@@ -198,36 +214,33 @@ class PeriodService {
       final d = q.docs.first;
       return {'periodId': d.id, ...d.data() as Map<String, dynamic>};
     } catch (e) {
-      print('최근 생리 기록 조회 실패: $e');
+      debugPrint('[PeriodService] getLatestPeriod ERR: $e');
       return null;
     }
   }
 
   // 특정 기간의 생리 기록들 가져오기
   Future<List<Map<String, dynamic>>> getPeriodsInRange(
-    String userId, 
-    DateTime startDate, 
-    DateTime endDate
+    String userId,
+    DateTime startDate,
+    DateTime endDate,
   ) async {
     try {
       final s = _normalizeDate(startDate);
       final e = _normalizeDate(endDate);
 
-      QuerySnapshot snapshot = await _col
+      final snapshot = await _col
           .where('userId', isEqualTo: userId)
           .where('startDate', isGreaterThanOrEqualTo: Timestamp.fromDate(s))
           .where('startDate', isLessThanOrEqualTo: Timestamp.fromDate(e))
           .orderBy('startDate', descending: true)
           .get();
 
-      return snapshot.docs.map((doc) {
-        return {
-          'periodId': doc.id,
-          ...doc.data() as Map<String, dynamic>
-        };
-      }).toList();
+      return snapshot.docs
+          .map((doc) => {'periodId': doc.id, ...doc.data() as Map<String, dynamic>})
+          .toList();
     } catch (e) {
-      print('생리 기록 범위 조회 실패: $e');
+      debugPrint('[PeriodService] getPeriodsInRange ERR: $e');
       return [];
     }
   }
@@ -241,11 +254,10 @@ class PeriodService {
 
       final existing = snap.data() as Map<String, dynamic>;
 
-      // ------ 1) 입력 데이터 정규화 (DateTime -> Timestamp) ------
+      // 1) 입력 데이터 정규화
       Timestamp? tsStart;
       Timestamp? tsEnd;
 
-      // startDate
       if (data.containsKey('startDate')) {
         final v = data['startDate'];
         if (v is Timestamp) {
@@ -257,7 +269,6 @@ class PeriodService {
         tsStart = existing['startDate'] as Timestamp;
       }
 
-      // endDate
       if (data.containsKey('endDate')) {
         final v = data['endDate'];
         if (v is Timestamp) {
@@ -265,24 +276,23 @@ class PeriodService {
         } else if (v is DateTime) {
           tsEnd = Timestamp.fromDate(_normalizeDate(v));
         } else if (v == null) {
-          tsEnd = null; // 명시적 null 허용
+          tsEnd = null;
         }
       } else if (existing['endDate'] is Timestamp) {
         tsEnd = existing['endDate'] as Timestamp?;
       }
 
-      // ------ 2) flow 결정: 명시적 입력 > 보정 계산 ------
+      // 2) flow 결정: 명시적 입력 > 계산
       String? flowFromInput;
       final fv = data['flow'];
       if (fv is String && fv.trim().isNotEmpty) {
-        flowFromInput = fv.trim();           // ← 명시적 flow 우선
+        flowFromInput = fv.trim();
       }
 
       String finalFlow;
       if (flowFromInput != null) {
         finalFlow = flowFromInput;
       } else {
-        // 없으면 계산
         final DateTime? startDate = tsStart?.toDate();
         final DateTime? endDate = tsEnd?.toDate();
         if (startDate != null) {
@@ -293,18 +303,13 @@ class PeriodService {
             sensorStatus: data['sensorStatus'],
           );
         } else {
-          // 시작일이 없으면 기존 flow 유지 (없으면 before)
           finalFlow = (existing['flow'] as String?) ?? 'before';
         }
       }
 
-      // ------ 3) 업데이트 페이로드 구성 ------
       final payload = <String, dynamic>{
-        // 날짜는 정규화된 Timestamp만 쓴다
         if (tsStart != null) 'startDate': tsStart,
-        // endDate를 명시적으로 null로 덮을 수도 있음
-        'endDate': tsEnd, 
-        // 기타 전달된 값도 머지 (단, start/end/flow/updatedAt은 우리가 관리)
+        'endDate': tsEnd,
         ...data..remove('startDate')..remove('endDate')..remove('flow')..remove('updatedAt'),
         'flow': finalFlow,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -312,68 +317,16 @@ class PeriodService {
 
       await ref.update(payload);
 
-      // 디버깅: 서버에서 재확인
       final check = await ref.get(const GetOptions(source: Source.server));
-      print('[updatePeriodData] saved: ${check.data()}');
-
-      print('생리 정보 업데이트 성공!');
+      debugPrint('[PeriodService] updatePeriodData saved: ${check.data()}');
       return true;
     } catch (e) {
-      print('생리 정보 업데이트 실패: $e');
+      debugPrint('[PeriodService] updatePeriodData ERR: $e');
       return false;
     }
   }
-  /*
-  Future<bool> updatePeriodData(String periodId, Map<String, dynamic> data) async {
-    try {
-      // 기존 데이터 먼저 가져오기
-      DocumentSnapshot doc = await _col.doc(periodId).get();
-      if (!doc.exists) return false;
 
-      Map<String, dynamic> existingData = doc.data() as Map<String, dynamic>;
-      
-      // 날짜 정보로 flow 재계산
-      DateTime? startDate;
-      DateTime? endDate;
-      
-      if (data.containsKey('startDate') && data['startDate'] is Timestamp) {
-        startDate = (data['startDate'] as Timestamp).toDate();
-      } else if (existingData.containsKey('startDate') && existingData['startDate'] is Timestamp) {
-        startDate = (existingData['startDate'] as Timestamp).toDate();
-      }
-      
-      if (data.containsKey('endDate') && data['endDate'] is Timestamp) {
-        endDate = (data['endDate'] as Timestamp).toDate();
-      } else if (existingData.containsKey('endDate') && existingData['endDate'] is Timestamp) {
-        endDate = (existingData['endDate'] as Timestamp).toDate();
-      }
-
-      // flow 재계산 (날짜 정보가 있는 경우)
-      if (startDate != null) {
-        final newFlow = _calculateFlow(
-          startDate: startDate,
-          endDate: endDate,
-          cycleLength: data['cycleLength'] ?? existingData['cycleLength'],
-          sensorStatus: data['sensorStatus'], // 센서 상태 (나중에 추가)
-        );
-        data['flow'] = newFlow;
-      }
-
-      await _col.doc(periodId).update({
-        ...data,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      
-      print('생리 정보 업데이트 성공!');
-      return true;
-    } catch (e) {
-      print('생리 정보 업데이트 실패: $e');
-      return false;
-    }
-  }
-  */
-
-  /// 특정 사용자의 최근 1개 생리 기록을 실시간으로 가져오는 스트림
+  /// 특정 사용자의 최근 1개 생리 기록 스트림
   Stream<Map<String, dynamic>?> latestPeriodStream(String userId) {
     return _col
         .where('userId', isEqualTo: userId)
@@ -392,41 +345,15 @@ class PeriodService {
     try {
       final latest = await getLatestPeriod(userId);
       if (latest == null) return null;
-
       final raw = latest['flow'];
       if (raw is String) {
         final v = raw.trim();
-        return v.isNotEmpty ? v : null; // 빈 문자열이면 null
+        return v.isNotEmpty ? v : null;
       }
       return null;
     } catch (e) {
-      print('최근 flow 조회 실패: $e');
+      debugPrint('[PeriodService] getLatestFlow ERR: $e');
       return null;
-    }
-}
-  // Future<String?> getLatestFlow(String userId) async {
-  //   try {
-  //     final latestPeriod = await getLatestPeriod(userId);
-  //     return latestPeriod?['flow'] as String?;
-  //   } catch (e) {
-  //     print('최근 flow 조회 실패: $e');
-  //     return null;
-  //   }
-  // }
-
-  /// flow별 메시지 가져오기 (새로운 메시지 체계)
-  String getFlowMessage(String flow) {
-    switch (flow) {
-      case 'before':
-        return '아직 시작 전이에요'; // 생리 예상일 전
-      case 'safe':
-        return '아직은 보송보송해요'; // 센서 1개 켜짐
-      case 'warning':
-        return '곧 교체할 시간이 다가와요'; // 센서 2개 켜짐
-      case 'need':
-        return '교체가 필요해요'; // 센서 3개 켜짐
-      default:
-        return '상태를 확인해주세요';
     }
   }
 
@@ -444,24 +371,22 @@ class PeriodService {
       }
       return null;
     } catch (e) {
-      print('다음 생리 예상일 계산 실패: $e');
+      debugPrint('[PeriodService] calculateNextPeriodDate ERR: $e');
       return null;
     }
   }
 
-  /// 센서 상태로 flow 업데이트 (나중에 센서 연결 시 사용)
+  /// (호환용) 특정 periodId로 flow 업데이트
   Future<bool> updateFlowBySensorStatus(String periodId, String sensorStatus) async {
     try {
-      // sensorStatus: 'safe' (1개), 'warning' (2개), 'need' (3개)
       await _col.doc(periodId).update({
         'flow': sensorStatus,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      
-      print('센서 상태로 flow 업데이트: $sensorStatus');
+      debugPrint('[PeriodService] updateFlowBySensorStatus OK: $sensorStatus on $periodId');
       return true;
     } catch (e) {
-      print('센서 flow 업데이트 실패: $e');
+      debugPrint('[PeriodService] updateFlowBySensorStatus ERR: $e');
       return false;
     }
   }
@@ -472,15 +397,14 @@ class PeriodService {
     if (latest == null) return [];
 
     final tsStart = latest['startDate'] as Timestamp?;
-    final tsEnd   = latest['endDate']   as Timestamp?;
+    final tsEnd = latest['endDate'] as Timestamp?;
 
     final start = tsStart != null ? _normalizeDate(tsStart.toDate()) : null;
     if (start == null) return [];
 
     final int periodLen = (latest['periodLength'] as int?) ?? 5;
     final DateTime end =
-        tsEnd != null ? _normalizeDate(tsEnd.toDate())
-                      : _normalizeDate(start.add(Duration(days: periodLen - 1)));
+        tsEnd != null ? _normalizeDate(tsEnd.toDate()) : _normalizeDate(start.add(Duration(days: periodLen - 1)));
 
     final days = <DateTime>[];
     for (DateTime d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
@@ -489,45 +413,44 @@ class PeriodService {
     return days;
   }
 
-  // PeriodService 클래스 내부에 추가
-Future<Map<String, dynamic>> getPeriodData(String periodId) async {
-  final doc = await _col.doc(periodId).get();
-  if (!doc.exists) {
-    throw Exception('Period document not found: $periodId');
+  // 상세 조회
+  Future<Map<String, dynamic>> getPeriodData(String periodId) async {
+    final doc = await _col.doc(periodId).get();
+    if (!doc.exists) {
+      throw Exception('Period document not found: $periodId');
+    }
+
+    final raw = doc.data() as Map<String, dynamic>? ?? {};
+
+    DateTime? _toDate(dynamic v) {
+      if (v == null) return null;
+      if (v is Timestamp) return v.toDate();
+      if (v is DateTime) return v;
+      return null;
+    }
+
+    int? _toInt(dynamic v) {
+      if (v == null) return null;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return null;
+    }
+
+    final int? cycleLen = _toInt(raw['cycleLength']) ?? 28;
+    final int? periodLen = _toInt(raw['periodDays']) ?? _toInt(raw['periodLength']) ?? 5;
+
+    return {
+      'periodId': doc.id,
+      'userId': raw['userId'],
+      'nick': raw['nick'],
+      'flow': raw['flow'] as String?,
+      'startDate': _toDate(raw['startDate']),
+      'endDate': _toDate(raw['endDate']),
+      'cycleLength': cycleLen,
+      'periodDays': periodLen,
+      'extraData': raw['extraData'] as Map<String, dynamic>?,
+      'createdAt': raw['createdAt'],
+      'updatedAt': raw['updatedAt'],
+    };
   }
-
-  final raw = doc.data() as Map<String, dynamic>? ?? {};
-
-  DateTime? _toDate(dynamic v) {
-    if (v == null) return null;
-    if (v is Timestamp) return v.toDate();
-    if (v is DateTime) return v;
-    return null;
-  }
-
-  int? _toInt(dynamic v) {
-    if (v == null) return null;
-    if (v is int) return v;
-    if (v is num) return v.toInt();
-    return null;
-  }
-
-  // 저장 필드명 호환: periodLength(저장) ↔ periodDays(화면)
-  final int? cycleLen = _toInt(raw['cycleLength']) ?? 28;
-  final int? periodLen = _toInt(raw['periodDays']) ?? _toInt(raw['periodLength']) ?? 5;
-
-  return {
-    'periodId': doc.id,
-    'userId': raw['userId'],
-    'nick': raw['nick'],
-    'flow': raw['flow'] as String?,
-    'startDate': _toDate(raw['startDate']),
-    'endDate': _toDate(raw['endDate']),
-    'cycleLength': cycleLen,
-    'periodDays': periodLen,                // ✅ 화면에서 기대하는 키로 맞춰줌
-    'extraData': raw['extraData'] as Map<String, dynamic>?,
-    'createdAt': raw['createdAt'],
-    'updatedAt': raw['updatedAt'],
-  };
-}
 }
