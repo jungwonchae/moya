@@ -399,6 +399,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'userId': userId,   // ← FirebaseAuth에서 가져온 uid
                               'periodId': null,   // 아직 없으면 null 전달
                               'nick': name,       // 사용자 이름 있으면 전달
+                              'quickInput': true,
                             },
                           ),
                           changeCount: changeCount,

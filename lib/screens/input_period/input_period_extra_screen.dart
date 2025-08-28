@@ -23,23 +23,110 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
   
   final PeriodService _service = PeriodService();
   bool _saving = false;
+  bool _loading = true;
+  
+  // 수정 모드인지 확인
+  bool isEditMode = false;
 
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   @override
   void initState() {
     super.initState();
-    _init();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    setState(() => userId = uid);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loading) {
+      _init();
+    }
   }
 
   Future<void> _init() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    setState(() => userId = uid);
+    final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
+    isEditMode = args['isEdit'] == true;
 
-    if (uid == null) return; // 로그인 필요
+    if (userId == null) return;
 
+    if (isEditMode) {
+      await _loadExistingData(args);
+    } else {
+      await _loadRecentStartDate(userId!);
+    }
+    
+    if (mounted) {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadExistingData(Map args) async {
+    final periodId = args['periodId'] as String?;
+    final startDate = args['recentStartDate'] as DateTime?;
+    
+    if (startDate != null) {
+      setState(() {
+        recentStartDate = _dateOnly(startDate);
+      });
+    }
+    
+    if (periodId != null) {
+      try {
+        final data = await _service.getPeriodData(periodId);
+        print('[ExtraScreen] Firebase data received: $data');
+        
+        // 종료일 정보 로드
+        DateTime? existingEndDate;
+        if (data['endDate'] != null) {
+          final endDateValue = data['endDate'];
+          if (endDateValue is Timestamp) {
+            existingEndDate = endDateValue.toDate();
+          } else if (endDateValue is DateTime) {
+            existingEndDate = endDateValue;
+          }
+        }
+        
+        // extraData에서도 확인
+        final extraData = data['extraData'] as Map<String, dynamic>?;
+        if (extraData != null) {
+          if (existingEndDate == null && extraData['endDate'] != null) {
+            final endDateValue = extraData['endDate'];
+            if (endDateValue is DateTime) {
+              existingEndDate = endDateValue;
+            }
+          }
+          
+          // 피임약 정보 로드
+          if (extraData['medication'] != null) {
+            isOnMedication = extraData['medication'] as bool;
+          }
+        }
+        
+        // isOnMedication 필드에서도 확인
+        if (isOnMedication == null && data['isOnMedication'] != null) {
+          isOnMedication = data['isOnMedication'] as bool;
+        }
+        
+        if (existingEndDate != null) {
+          selectedDate = existingEndDate;
+        } else if (recentStartDate != null) {
+          // 종료일이 없으면 시작일 + 1일로 설정
+          selectedDate = recentStartDate!.add(const Duration(days: 1));
+        }
+        
+        print('[ExtraScreen] Loaded - endDate: $existingEndDate, medication: $isOnMedication');
+        
+      } catch (e) {
+        print('[ExtraScreen] Error loading existing data: $e');
+      }
+    }
+  }
+
+  Future<void> _loadRecentStartDate(String uid) async {
     // 최근 시작일 Firestore에서 가져오기
-    final latest = await _service.getLatestPeriod(uid); // 기대: { id, startDate, endDate, ... }
+    final latest = await _service.getLatestPeriod(uid);
     final ts = latest?["startDate"];
     DateTime? start;
     if (ts is Timestamp) {
@@ -51,20 +138,18 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
     }
 
     if (start != null) {
-      if (!mounted) return; // 위젯 dispose된 뒤 setState 방지
+      if (!mounted) return;
 
       final startOnly = _dateOnly(start);
       final selectedOnly = _dateOnly(selectedDate);
 
       setState(() {
         recentStartDate = startOnly;
-        // selectedDate가 recentStartDate 이전이면 보정 (날짜만 비교)
         if (selectedOnly.isBefore(startOnly)) {
           selectedDate = startOnly.add(const Duration(days: 1));
         }
       });
     } else {
-      // Firestore에 startDate가 없을 때 안내
       debugPrint('InputPeriodExtraScreen> startDate not found for uid=$uid');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -169,43 +254,120 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
 
   // Firebase에 생리 정보 저장
   Future<void> _savePeriodToFirebase() async {
-  if (_saving || recentStartDate == null || userId == null) return;
+    if (_saving || recentStartDate == null || userId == null) return;
 
-  setState(() => _saving = true);
+    setState(() => _saving = true);
 
-  try {
-    await PeriodService().upsertExtraByStartDate(
-      userId: userId!,
-      recentStartDate: recentStartDate!,
-      selectedEndDate: selectedDate,
-      isOnMedication: isOnMedication,
-    );
+    try {
+      if (isEditMode) {
+        // 수정 모드일 때는 기존 periodId를 사용해서 업데이트
+        final args = (ModalRoute.of(context)?.settings.arguments as Map?) ?? {};
+        final periodId = args['periodId'] as String?;
+        
+        if (periodId != null) {
+          final updateData = <String, dynamic>{};
+          
+          // 종료일 저장
+          if (selectedDate != recentStartDate) {
+            updateData['endDate'] = Timestamp.fromDate(selectedDate);
+          }
+          
+          // 피임약 정보 저장
+          if (isOnMedication != null) {
+            updateData['isOnMedication'] = isOnMedication;
+          }
+          
+          // extraData로도 저장 (호환성을 위해)
+          Map<String, dynamic> extraData = {};
+          if (selectedDate != recentStartDate) {
+            extraData['endDate'] = selectedDate;
+          }
+          if (isOnMedication != null) {
+            extraData['medication'] = isOnMedication;
+          }
+          if (extraData.isNotEmpty) {
+            updateData['extraData'] = extraData;
+          }
+          
+          if (updateData.isNotEmpty) {
+            await _service.updatePeriodData(periodId, updateData);
+            print('[ExtraScreen] Data updated for periodId=$periodId: $updateData');
+          }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('추가 정보가 저장되었습니다!'),
+              backgroundColor: ColorTheme.subColor,
+            ),
+          );
+          
+          if (mounted) {
+            Navigator.pop(context);
+          }
+        }
+      } else {
+        // 일반 모드일 때는 기존 방식 사용
+        await PeriodService().upsertExtraByStartDate(
+          userId: userId!,
+          recentStartDate: recentStartDate!,
+          selectedEndDate: selectedDate,
+          isOnMedication: isOnMedication,
+        );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('생리 정보가 저장되었습니다!'),
-        backgroundColor: ColorTheme.subColor,
-      ),
-    );
-    // 저장 후 다음 화면으로 이동 (인자 전달 없이, 다음 화면에서 Firestore 재조회)
-    if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('생리 정보가 저장되었습니다!'),
+            backgroundColor: ColorTheme.subColor,
+          ),
+        );
+        
+        if (mounted) {
+          Navigator.pushNamed(context, '/input_ble');
+        }
+      }
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('저장 실패: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      print('[ExtraScreen] Save error: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _onSkip() {
+    if (isEditMode) {
+      Navigator.pop(context);
+    } else {
       Navigator.pushNamed(context, '/input_ble');
     }
-
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('저장 실패: $e'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  } finally {
-    if (mounted) setState(() => _saving = false);
   }
-}
   
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(ColorTheme.mainColor),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -233,12 +395,13 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
             SizedBox(height: 20),
             
             Text(
-              '더 정확한 예측을\n위해 알려주세요',
+              isEditMode ? '추가 정보를\n수정해주세요' : '더 정확한 예측을\n위해 알려주세요',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: ColorTheme.textBlack,
+                height: 1.3,
               ),
             ),
             
@@ -258,7 +421,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                 ),
                 Expanded(
                   child: Text(
-                    '최근 생리 종료일 (몰라도 괜찮아요)',
+                    isEditMode ? '생리 종료일' : '최근 생리 종료일 (몰라도 괜찮아요)',
                     style: TextStyle(
                       fontSize: 14,
                       color: ColorTheme.textGray,
@@ -390,25 +553,24 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
             Spacer(),
 
             ConfirmButton(
-              text: '다음',
+              text: isEditMode ? '저장' : '다음',
               isEnabled: !_saving && recentStartDate != null && userId != null,
               onPressed: _saving ? () {} : _savePeriodToFirebase,
             ),
 
-            Center(
-              child: TextButton(
-                onPressed: _saving
-                    ? null
-                    : () => Navigator.pushNamed(context, '/input_ble'),
-                child: Text(
-                  '건너뛰기',
-                  style: TextStyle(
-                    fontSize: 14, 
-                    color: Colors.grey[600],
+            if (!isEditMode) // 수정 모드에서는 건너뛰기 버튼 숨김
+              Center(
+                child: TextButton(
+                  onPressed: _saving ? null : _onSkip,
+                  child: Text(
+                    '건너뛰기',
+                    style: TextStyle(
+                      fontSize: 14, 
+                      color: Colors.grey[600],
+                    ),
                   ),
                 ),
               ),
-            ),
             
             SizedBox(height: 20),
           ],

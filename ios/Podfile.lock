@@ -1383,6 +1383,12 @@ PODS:
     - FlutterMacOS
   - permission_handler_apple (9.3.0):
     - Flutter
+  - Protobuf (3.29.5)
+  - reactive_ble_mobile (0.0.1):
+    - Flutter
+    - FlutterMacOS
+    - Protobuf (~> 3.5)
+    - SwiftProtobuf (~> 1.0)
   - RecaptchaInterop (101.0.0)
   - shared_preferences_foundation (0.0.1):
     - Flutter
@@ -1390,6 +1396,7 @@ PODS:
   - sqflite_darwin (0.0.4):
     - Flutter
     - FlutterMacOS
+  - SwiftProtobuf (1.31.0)
 
 DEPENDENCIES:
   - camera_avfoundation (from `.symlinks/plugins/camera_avfoundation/ios`)
@@ -1400,6 +1407,7 @@ DEPENDENCIES:
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
+  - reactive_ble_mobile (from `.symlinks/plugins/reactive_ble_mobile/darwin`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
 
@@ -1423,7 +1431,9 @@ SPEC REPOS:
     - GTMSessionFetcher
     - leveldb-library
     - nanopb
+    - Protobuf
     - RecaptchaInterop
+    - SwiftProtobuf
 
 EXTERNAL SOURCES:
   camera_avfoundation:
@@ -1442,6 +1452,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
+  reactive_ble_mobile:
+    :path: ".symlinks/plugins/reactive_ble_mobile/darwin"
   shared_preferences_foundation:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
   sqflite_darwin:
@@ -1474,9 +1486,12 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
   permission_handler_apple: 9878588469a2b0d0fc1e048d9f43605f92e6cec2
+  Protobuf: 164aea2ae380c3951abdc3e195220c01d17400e0
+  reactive_ble_mobile: 856183aeda09f2a676bbaecbea8915c3cb1d33df
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
   shared_preferences_foundation: fcdcbc04712aee1108ac7fda236f363274528f78
   sqflite_darwin: 5a7236e3b501866c1c9befc6771dfd73ffb8702d
+  SwiftProtobuf: caa61117d9a5eeb60a52375f6685991a1fd4bd7b
 
 PODFILE CHECKSUM: bb3c742600d5c7d1cfd6d76f6d6d629388a642e2
 

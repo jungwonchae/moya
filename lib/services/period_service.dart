@@ -377,4 +377,46 @@ class PeriodService {
     }
     return days;
   }
+
+  // PeriodService 클래스 내부에 추가
+Future<Map<String, dynamic>> getPeriodData(String periodId) async {
+  final doc = await _col.doc(periodId).get();
+  if (!doc.exists) {
+    throw Exception('Period document not found: $periodId');
+  }
+
+  final raw = doc.data() as Map<String, dynamic>? ?? {};
+
+  DateTime? _toDate(dynamic v) {
+    if (v == null) return null;
+    if (v is Timestamp) return v.toDate();
+    if (v is DateTime) return v;
+    return null;
+  }
+
+  int? _toInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return null;
+  }
+
+  // 저장 필드명 호환: periodLength(저장) ↔ periodDays(화면)
+  final int? cycleLen = _toInt(raw['cycleLength']) ?? 28;
+  final int? periodLen = _toInt(raw['periodDays']) ?? _toInt(raw['periodLength']) ?? 5;
+
+  return {
+    'periodId': doc.id,
+    'userId': raw['userId'],
+    'nick': raw['nick'],
+    'flow': raw['flow'] as String?,
+    'startDate': _toDate(raw['startDate']),
+    'endDate': _toDate(raw['endDate']),
+    'cycleLength': cycleLen,
+    'periodDays': periodLen,                // ✅ 화면에서 기대하는 키로 맞춰줌
+    'extraData': raw['extraData'] as Map<String, dynamic>?,
+    'createdAt': raw['createdAt'],
+    'updatedAt': raw['updatedAt'],
+  };
+}
 }

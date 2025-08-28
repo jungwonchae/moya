@@ -6,6 +6,8 @@ import 'package:moya_app/themes/colortheme.dart';
 // Firebase & Service
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:moya_app/services/user_service.dart';
+import 'package:moya_app/services/period_service.dart';
+
 
 class SettingScreen extends StatefulWidget {
   const SettingScreen({super.key});
@@ -16,6 +18,7 @@ class SettingScreen extends StatefulWidget {
 
 class _SettingScreenState extends State<SettingScreen> {
   final UserService _userService = UserService();
+
 
   String? _userName;
   bool _loading = true;
@@ -91,9 +94,14 @@ class _SettingScreenState extends State<SettingScreen> {
                             _SettingItem(
                               icon: Icons.calendar_today,
                               title: '생리 주기 입력',
-                              onTap: () => Navigator.pushNamed(context, '/setting_period'),
+                              onTap: () {
+                                final uid = FirebaseAuth.instance.currentUser?.uid;
+                                Navigator.pushNamed(context, '/setting_period', arguments: {
+                                  'userId': uid,
+                                });
+                              },
                             ),
-                            _SettingItem(
+                                                        _SettingItem(
                               icon: Icons.bluetooth,
                               title: '블루투스 연결 관리',
                               onTap: () => Navigator.pushNamed(context, '/setting_bluetooth'),
