@@ -51,5 +51,10 @@
 	<string>MOYA 기기와 BLE로 통신합니다.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>MOYA 기기와 BLE로 통신합니다.</string>
+	<!-- 백그라운드에서 유지/재연결이 필요하면 추가 -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string	string>bluetooth-central</string>
+	</array>
 </dict>
 </plist>

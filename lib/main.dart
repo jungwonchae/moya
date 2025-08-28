@@ -30,10 +30,14 @@ import 'screens/usage/usage_screens_container.dart';
 
 import 'services/user_service.dart';
 import 'services/period_service.dart';
+import 'services/ble_service.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  await BleService().initialize();  // 전역 싱글톤 초기화
 
   // ✅ 익명 로그인 (비회원)
   // final userCred = await FirebaseAuth.instance.signInAnonymously();
