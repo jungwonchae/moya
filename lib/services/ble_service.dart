@@ -6,6 +6,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:moya_app/services/notification_service.dart';
+import 'package:moya_app/algorithms/fluid_classifier.dart';
 
 class BleService {
   // ---- 싱글톤 ----
@@ -25,6 +26,13 @@ class BleService {
   final Guid _svcGuid = Guid(_nusService);
   final Guid _txGuid  = Guid(_nusTx);
   final Guid _rxGuid  = Guid(_nusRx);
+
+  // ---- 땀/피 분류 기준(간단 규칙) ----
+  static const int _sweatDiffThreshold = 40; // 축별 큰 변화 임계값
+  final FluidClassifier _classifier = FluidClassifier(
+    diffThreshold: _sweatDiffThreshold,
+    window: const Duration(minutes: 1), // 1분 윈도우 내 3축 감지 → sweat
+  );
 
   // 마지막으로 반영한 flow
   String? _prevFlow;
@@ -238,7 +246,7 @@ class BleService {
     }
   }
 
-  // 생리량 계산
+  // 생리량 계산 + 분류기 적용
   Future<void> _analyzeAndUpdate() async {
     if (_currentPeriodId == null) return;
     final prev = _recent[_recent.length - 2];
@@ -246,15 +254,7 @@ class BleService {
 
     debugPrint('[BleService] 분석 시작 - prev: $prev, cur: $cur');
 
-    // 0,0,0 은 무조건 safe
-    if (cur.every((e) => e == 0)) {
-      if (DateTime.now().difference(_lastFlowAt).inSeconds >= 10) {
-        await _updateFlow('safe', 'all_zero');
-      }
-      return;
-    }
-
-    // 변화량 기반 판단
+    // 변화량 기반 판단 (로그용)
     int changed = 0;
     List<int> changes = [];
     for (int i = 0; i < 3; i++) {
@@ -262,18 +262,24 @@ class BleService {
       changes.add(change);
       if (change >= _changeThreshold) changed++;
     }
-
     debugPrint('[BleService] 변화량: $changes, changed: $changed');
 
-    String? flow;
+    // === 1분 윈도우 기반 땀/피 분류 ===
+    final fluid = _classifier.addSample(prev, cur);
+    if (fluid == FluidType.sweat) {
+      // 땀으로 판단되면 false positive 방지를 위해 flow 업데이트/알림 스킵
+      debugPrint('[BleService] 분류기: sweat(땀) → flow/알림 스킵');
+      return;
+    }
 
+    // === 기존 flow 판단 ===
+    String? flow;
     if (changed == 2) {
-      flow = 'warning';
-      // warning일 때는 알림 보내지 않음
+      flow = 'warning'; // warning: 알림은 안 보냄
     } else if (changed >= 3) {
       flow = 'need';
     }
-    // changed == 0 또는 1인 경우 → 상태 유지 (업데이트 안 함)
+    // changed == 0 또는 1 → 상태 유지 (업데이트 안 함)
 
     // flow 업데이트 (10초 쿨다운 적용)
     if (flow != null && DateTime.now().difference(_lastFlowAt).inSeconds >= 10) {

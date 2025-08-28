@@ -385,10 +385,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             Positioned(
                               // bell 아이콘 위치에 맞춰 정확히 조정
                               top: 52, // SafeArea + padding 고려
-                              right: 20, // bell 아이콘의 오른쪽 위 모서리 근처
+                              right: 18, // bell 아이콘의 오른쪽 위 모서리 근처
                                child: Container(
-                                width: 12,
-                                height: 12,    
+                                width: 8,
+                                height: 8,    
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFFF3B30), // iOS red
                                   shape: BoxShape.circle,
