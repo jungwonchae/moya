@@ -14,9 +14,8 @@ class BleService {
   BleService._internal();
 
   // 알림 쿨다운 관련
-  bool _needNotifiedSinceLastSafe = false;
-  DateTime _lastNeedNotiAt = DateTime.fromMillisecondsSinceEpoch(0);
-  final Duration _needNotiCooldown = const Duration(minutes: 5);
+  DateTime _lastNeedNotificationAt = DateTime.fromMillisecondsSinceEpoch(0);
+  static const int _notificationCooldownMinutes = 30;
 
   // ---- NUS UUID ----
   static const String _nusService = '6E400001-B5A3-F393-E0A9-E50E24DCCA9E';
@@ -56,20 +55,12 @@ class BleService {
   DateTime _lastFlowAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   // ---- 센서 분석 ----
-  static const int _changeThreshold = 10; // 변화 감지 기준
+  static const int _changeThreshold = 15; // 변화 감지 기준
   final List<List<int>> _recent = [];     // 최근 샘플 5개 저장
 
   // ---------- 외부에서 periodId 설정 ----------
   void setPeriodId(String? periodId) {
     _currentPeriodId = periodId;
-  }
-
-  String? _userId;
-  String? _nick;
-
-  void setUserContext({required String userId, required String nick}) {
-    _userId = userId;
-    _nick = nick;
   }
 
   // ---------- 초기화 ----------
@@ -239,7 +230,7 @@ class BleService {
   }
 
   // 생리량 계산
-  Future<void> _analyzeAndUpdate() async {
+  void _analyzeAndUpdate() {
     if (_currentPeriodId == null) return;
     final prev = _recent[_recent.length - 2];
     final cur  = _recent[_recent.length - 1];
@@ -249,7 +240,7 @@ class BleService {
     // 0,0,0 은 무조건 safe
     if (cur.every((e) => e == 0)) {
       if (DateTime.now().difference(_lastFlowAt).inSeconds >= 10) {
-        await _updateFlow('safe', 'all_zero');
+        _updateFlow('safe', 'all_zero');
       }
       return;
     }
@@ -266,65 +257,65 @@ class BleService {
     debugPrint('[BleService] 변화량: $changes, changed: $changed');
 
     String? flow;
+    bool shouldNotify = false;
 
     if (changed == 2) {
       flow = 'warning';
       // warning일 때는 알림 보내지 않음
     } else if (changed >= 3) {
       flow = 'need';
+      
+      // need 알림 조건 체크
+      final isFirstNeed = (_prevFlow != 'need');
+      final cooldownPassed = DateTime.now().difference(_lastNeedNotificationAt).inMinutes >= _notificationCooldownMinutes;
+      
+      shouldNotify = isFirstNeed || cooldownPassed;
+      
+      debugPrint('[BleService] need 감지 - isFirstNeed: $isFirstNeed, cooldownPassed: $cooldownPassed, shouldNotify: $shouldNotify');
     }
     // changed == 0 또는 1인 경우 → 상태 유지 (업데이트 안 함)
 
     // flow 업데이트 (10초 쿨다운 적용)
     if (flow != null && DateTime.now().difference(_lastFlowAt).inSeconds >= 10) {
-      await _updateFlow(flow, 'sensor_change_$changed');
-      if (flow == 'need') {
-        await _maybeNotifyNeedOnce();
+      _updateFlow(flow, 'sensor_change_$changed');
+      
+      // need이고 알림 조건을 만족하는 경우에만 알림 발송
+      if (flow == 'need' && shouldNotify) {
+        _sendNeedNotification();
       }
     }
   }
 
-  Future<void> _maybeNotifyNeedOnce() async {
-    // if already notified since last safe AND cooldown not passed, return
-    final now = DateTime.now();
-    if (_needNotifiedSinceLastSafe && now.difference(_lastNeedNotiAt) < _needNotiCooldown) {
-      debugPrint('[BleService] need 알림 스킵(쿨다운)');
-      return;
-    }
-
-    String? uid = _userId;
-    String nick = _nick ?? 'MOYA';
-
-    if (uid == null || _nick == null) {
-      if (_currentPeriodId == null) return;
-      try {
-        final ps = await FirebaseFirestore.instance.collection('periods').doc(_currentPeriodId).get();
-        if (ps.exists) {
-          uid = ps['userId'] as String? ?? uid;
-          nick = (ps['nick'] as String?) ?? nick;
-        }
-      } catch (e) {
-        debugPrint('[BleService] period 문서 조회 실패: $e');
-      }
-    }
-
-    if (uid == null) return;
-
-    // set flags BEFORE sending to avoid duplicate floods
-    _needNotifiedSinceLastSafe = true;
-    _lastNeedNotiAt = now;
-
+  // 별도 메서드로 알림 로직 분리
+  Future<void> _sendNeedNotification() async {
+    if (_currentPeriodId == null) return;
+    
+    _lastNeedNotificationAt = DateTime.now(); // 알림 발송 시간 기록
+    
     try {
-      await NotificationService().notifyNeedFlowSplit(
-        userId: uid,
-        nick: nick,
-        message: '지금 상태에서 바로 교체하는 걸 추천해요',
-        relatedData: {
-          'periodId': _currentPeriodId,
-          'recommendedInterval': '3~4시간',
-        },
-      );
-      debugPrint('[BleService] need 알림 발송 완료: userId=$uid, nick=$nick');
+      final ps = await FirebaseFirestore.instance
+          .collection('periods')
+          .doc(_currentPeriodId)
+          .get();
+          
+      if (ps.exists) {
+        final nick = (ps['nick'] as String?) ?? 'MOYA';
+        final userId = ps['userId'] as String?;
+        
+        if (userId != null) {
+          debugPrint('[BleService] need 알림 발송: nick=$nick, userId=$userId');
+          
+          await NotificationService().notifyNeedFlowSplit(
+            userId: userId,
+            nick: nick,
+            message: '지금 상태에서 바로 교체하는 걸 추천해요',
+            relatedData: {
+              'periodId': _currentPeriodId,
+              'recommendedInterval': '3~4시간',
+            },
+          );
+        }
+      }
     } catch (e) {
       debugPrint('[BleService] need 알림 발송 실패: $e');
     }
@@ -352,9 +343,6 @@ class BleService {
 
       _prevFlow = flow;            // ← 이번 반영 상태를 저장해 다음 전이 체크에 사용
       _lastFlowAt = DateTime.now();
-      if (isNowSafe) {
-        _needNotifiedSinceLastSafe = false;
-      }
       debugPrint('[BleService] flow -> $flow ($reason)');
     } catch (e) {
       debugPrint('[BleService] flow update fail: $e');
