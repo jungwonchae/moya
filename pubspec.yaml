@@ -12,8 +12,9 @@ dependencies:
   flutter:
     sdk: flutter
   get: ^4.6.6
+  flutter_blue_plus: ^1.32.0   # 1.3x 대 버전 아무거나 최신
+  permission_handler: ^11.3.1  # (Android 권한 런타임 요청용)
   flutter_bluetooth_serial: ^0.4.0
-  permission_handler: ^11.0.1
   shared_preferences: ^2.2.0
   camera: ^0.10.5+5
   http: ^1.2.1 #chatGPT

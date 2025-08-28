@@ -48,6 +48,8 @@
 	<key>NSCameraUsageDescription</key>
 	<string>카메라를 사용하여 이미지를 분석합니다.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>BLE 연결에 사용합니다.</string>
+	<string>MOYA 기기와 BLE로 통신합니다.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>MOYA 기기와 BLE로 통신합니다.</string>
 </dict>
 </plist>
