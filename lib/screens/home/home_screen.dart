@@ -55,7 +55,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initUserThenLoad();
-    _subscribeBleStreams(); // ✅ 화면은 오직 구독만
+    _subscribeBleStreams();
+    _ble.connectionStream.listen((ok) {
+      setState(() => _isBleConnected = ok);
+    });
+    _ble.sensorDataStream.listen((v) {
+      setState(() => _latestSensorData = v);
+    });
   }
 
   @override
@@ -101,7 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final latest = await _periodService.getLatestPeriod(userId!);
       final periodId = latest?['periodId'] as String?;
       if (periodId != null) {
-        _ble.setPeriodId(periodId); // ✅ 중앙 서비스에 periodId 전달
+        _ble.setPeriodId(periodId); // 중앙 서비스에 periodId 전달
         _subscribePeriodDoc(periodId); // UI는 실시간 반영만
       }
     } catch (e) {
