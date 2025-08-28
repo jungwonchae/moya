@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/period_data.dart';
+import 'onboarding_controller.dart';
 
 enum PeriodPhase {
   beforePeriod,  // 시작 전

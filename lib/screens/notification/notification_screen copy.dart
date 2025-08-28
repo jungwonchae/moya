@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:moya_app/themes/colortheme.dart';
-import 'package:moya_app/services/notification_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:moya_app/models/notification_item.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -12,34 +9,11 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
-  final NotificationService _notificationService = NotificationService();
-  String? userId;
-  List<NotificationItem> _items = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeUser();
-  }
-
-  void _initializeUser() {
-    userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null) {
-      _notificationService.getUserNotifications(userId!).listen((notifications) {
-        if (mounted) {
-          // 🔍 디버깅용 로그
-          print('알림 개수: ${notifications.length}');
-          for (final item in notifications) {
-            print('알림: ${item.title}, 읽음: ${item.isRead}, 생성 시각: ${item.createdAt}');
-          }
-
-          setState(() {
-            _items = notifications;
-          });
-        }
-      });
-    }
-  }
+  final List<_Notice> _items = [
+    _Notice(title: '생리대 교체 확인 필요', time: '2025-08-20 오후 03:56', isRead: false, type: NoticeType.warning),
+    _Notice(title: '생리대 교체',        time: '2025-08-20 오후 03:56', isRead: false, type: NoticeType.normal),
+    _Notice(title: '생리대 교체',        time: '2025-08-20 오후 03:56', isRead: true,  type: NoticeType.normal),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -72,137 +46,66 @@ class _NotificationScreenState extends State<NotificationScreen> {
             ),
             const SizedBox(height: 8),
 
-            if (_items.isEmpty)
-              const Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.notifications_none,
-                        size: 80,
-                        color: Colors.grey,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        '알림이 없습니다',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: ListView.separated(
-                  itemCount: _items.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(height: 1, color: Color(0xFFEAEAF1)),
-                  itemBuilder: (context, i) {
-                    final n = _items[i];
-                    return InkWell(
-                      onTap: () => _openDetailModal(context, i),
-                      onLongPress: () => _toggleReadStatus(i),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-                        child: Row(
-                          children: [
-                            // 안읽음 점
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              width: 8, height: 8,
-                              margin: const EdgeInsets.only(right: 16),
-                              decoration: BoxDecoration(
-                                color: n.isRead ? Colors.transparent : ColorTheme.subColor,
-                                shape: BoxShape.circle,
+            Expanded(
+              child: ListView.separated(
+                itemCount: _items.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1, color: Color(0xFFEAEAF1)),
+                itemBuilder: (context, i) {
+                  final n = _items[i];
+                  return InkWell(
+                    onTap: () => _openDetailModal(context, i),
+                    onLongPress: () => setState(() {
+                      _items[i] = n.copyWith(isRead: !n.isRead); // 길게 눌러 토글
+                    }),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                      child: Row(
+                        children: [
+                          // 안읽음 점
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 8, height: 8,
+                            margin: const EdgeInsets.only(right: 16),
+                            decoration: BoxDecoration(
+                              color: n.isRead ? Colors.transparent : ColorTheme.subColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          // 제목
+                          Expanded(
+                            child: Text(
+                              n.title,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: n.isRead
+                                    ? const Color(0xFF3B3B3B)
+                                    : Colors.black,
                               ),
                             ),
-                            // 제목
-                            Expanded(
-                              child: Text(
-                                n.title,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: n.isRead
-                                      ? const Color(0xFF3B3B3B)
-                                      : Colors.black,
-                                ),
-                              ),
+                          ),
+                          const SizedBox(width: 12),
+                          // 시간
+                          Text(
+                            n.time,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
+                              fontWeight: FontWeight.w600,
                             ),
-                            const SizedBox(width: 12),
-                            // 시간
-                            Text(
-                              _formatTime(n.createdAt),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF6B7280),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
+            ),
           ],
         ),
       ),
     );
-  }
-
-  String _formatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final diff = now.difference(dateTime);
-    
-    if (diff.inDays > 0) {
-      return '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')}';
-    } else if (diff.inHours > 0) {
-      return '${diff.inHours}시간 전';
-    } else if (diff.inMinutes > 0) {
-      return '${diff.inMinutes}분 전';
-    } else {
-      return '방금 전';
-    }
-  }
-
-  Future<void> _toggleReadStatus(int index) async {
-    if (userId == null) return;
-    
-    final notification = _items[index];
-    try {
-      await _notificationService.markAsRead(
-        userId!,
-        notification.id,
-        !notification.isRead,
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('상태 변경 실패: $e')),
-      );
-    }
-  }
-
-  Future<void> _deleteNotification(int index) async {
-    if (userId == null) return;
-    
-    final notification = _items[index];
-    try {
-      await _notificationService.deleteNotification(userId!, notification.id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('알림이 삭제되었습니다.')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('삭제 실패: $e')),
-      );
-    }
   }
 
   Future<void> _openDetailModal(BuildContext context, int index) async {
@@ -244,10 +147,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    n.type == NotificationType.warning
+                    n.type == NoticeType.warning
                         ? Icons.warning_amber_rounded
                         : Icons.check_circle_outline_rounded,
-                    color: n.type == NotificationType.warning
+                    color: n.type == NoticeType.warning
                         ? Colors.amber[700]
                         : ColorTheme.subColor,
                     size: 24,
@@ -273,7 +176,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   const Icon(Icons.schedule_rounded, size: 18, color: Color(0xFF6B7280)),
                   const SizedBox(width: 6),
                   Text(
-                    _formatTime(n.createdAt),
+                    n.time,
                     style: const TextStyle(
                       fontSize: 13,
                       color: Color(0xFF6B7280),
@@ -289,7 +192,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
               // 설명
               Text(
-                n.message,
+                n.type == NoticeType.warning
+                    ? '흡수량이 높게 감지됐어요. 생리대 상태를 확인하고 필요하면 교체해 주세요.'
+                    : '정상적으로 교체가 기록되었어요. 수분 보충과 휴식도 잊지 마세요.',
                 style: const TextStyle(
                   fontSize: 15,
                   color: Color(0xFF374151),
@@ -300,18 +205,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
               const SizedBox(height: 14),
 
               // 관련 정보 칩
-              if (n.relatedData != null)
-                Wrap(
-                  spacing: 8, runSpacing: 8,
-                  children: [
-                    if (n.relatedData!['changeCount'] != null)
-                      _InfoChip(label: '오늘 교체 횟수 ${n.relatedData!['changeCount']}회'),
-                    if (n.relatedData!['lastChangeHours'] != null)
-                      _InfoChip(label: '마지막 교체 ${n.relatedData!['lastChangeHours']}시간 전'),
-                    if (n.relatedData!['recommendedInterval'] != null)
-                      _InfoChip(label: '권장 교체 주기 ${n.relatedData!['recommendedInterval']}'),
-                  ],
-                ),
+              Wrap(
+                spacing: 8, runSpacing: 8,
+                children: const [
+                  _InfoChip(label: '오늘 교체 횟수 2회'),
+                  _InfoChip(label: '마지막 교체 0.5시간 전'),
+                  _InfoChip(label: '권장 교체 주기 4~6시간'),
+                ],
+              ),
 
               const SizedBox(height: 18),
 
@@ -321,7 +222,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
-                        _toggleReadStatus(index);
+                        setState(() {
+                          _items[index] = n.copyWith(isRead: !n.isRead);
+                        });
                         Navigator.pop(ctx);
                       },
                       style: ElevatedButton.styleFrom(
@@ -339,8 +242,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   IconButton(
                     tooltip: '삭제',
                     onPressed: () {
+                      setState(() {
+                        _items.removeAt(index);
+                      });
                       Navigator.pop(ctx);
-                      _deleteNotification(index);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('알림이 삭제되었습니다.')),
+                      );
                     },
                     icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
                   ),
@@ -356,6 +264,31 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+enum NoticeType { normal, warning }
+
+class _Notice {
+  final String title;
+  final String time;
+  final bool isRead;
+  final NoticeType type;
+
+  const _Notice({
+    required this.title,
+    required this.time,
+    required this.isRead,
+    this.type = NoticeType.normal,
+  });
+
+  _Notice copyWith({String? title, String? time, bool? isRead, NoticeType? type}) {
+    return _Notice(
+      title: title ?? this.title,
+      time: time ?? this.time,
+      isRead: isRead ?? this.isRead,
+      type: type ?? this.type,
     );
   }
 }

@@ -331,10 +331,9 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
           final existingPeriodId = latestPeriod['periodId'] as String;
           await _service.updatePeriodData(existingPeriodId, {
             'startDate': selectedDate,
-            'flow': 'during', // 생리 시작으로 flow 상태 변경
-            'updatedAt': DateTime.now(),
+            'flow': 'safe', // 기기 기준 flow 사용: 시작 시 기본 safe
           });
-          print('[RecentScreen] Updated period flow status: $existingPeriodId, startDate: $selectedDate, flow: during');
+          print('[RecentScreen] Updated period flow status: $existingPeriodId, startDate: $selectedDate, flow: safe');
         } else {
           // 기존 period가 없으면 새로 생성 (첫 사용자의 경우)
           periodId = await _service.createDraftWithNick(
@@ -343,9 +342,9 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
           );
           await _service.updatePeriodData(periodId, {
             'startDate': selectedDate,
-            'flow': 'during',
+            'flow': 'safe', // 기기 기준 flow 초기값
           });
-          print('[RecentScreen] Created new period: $periodId with startDate: $selectedDate, flow: during');
+          print('[RecentScreen] Created new period: $periodId with startDate: $selectedDate, flow: safe');
         }
 
         // 홈으로 돌아가기

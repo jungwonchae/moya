@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'notification_service.dart';
+
 
 extension _DateHelpers on DateTime {
   DateTime get d => DateTime(year, month, day); // normalize
@@ -6,6 +8,7 @@ extension _DateHelpers on DateTime {
 
 class PeriodService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final NotificationService _noti = NotificationService();
   CollectionReference get _col => _firestore.collection('periods');
   
 
@@ -232,6 +235,97 @@ class PeriodService {
   // 생리 정보 업데이트 (flow 재계산 포함)
   Future<bool> updatePeriodData(String periodId, Map<String, dynamic> data) async {
     try {
+      final ref = _col.doc(periodId);
+      final snap = await ref.get();
+      if (!snap.exists) return false;
+
+      final existing = snap.data() as Map<String, dynamic>;
+
+      // ------ 1) 입력 데이터 정규화 (DateTime -> Timestamp) ------
+      Timestamp? tsStart;
+      Timestamp? tsEnd;
+
+      // startDate
+      if (data.containsKey('startDate')) {
+        final v = data['startDate'];
+        if (v is Timestamp) {
+          tsStart = v;
+        } else if (v is DateTime) {
+          tsStart = Timestamp.fromDate(_normalizeDate(v));
+        }
+      } else if (existing['startDate'] is Timestamp) {
+        tsStart = existing['startDate'] as Timestamp;
+      }
+
+      // endDate
+      if (data.containsKey('endDate')) {
+        final v = data['endDate'];
+        if (v is Timestamp) {
+          tsEnd = v;
+        } else if (v is DateTime) {
+          tsEnd = Timestamp.fromDate(_normalizeDate(v));
+        } else if (v == null) {
+          tsEnd = null; // 명시적 null 허용
+        }
+      } else if (existing['endDate'] is Timestamp) {
+        tsEnd = existing['endDate'] as Timestamp?;
+      }
+
+      // ------ 2) flow 결정: 명시적 입력 > 보정 계산 ------
+      String? flowFromInput;
+      final fv = data['flow'];
+      if (fv is String && fv.trim().isNotEmpty) {
+        flowFromInput = fv.trim();           // ← 명시적 flow 우선
+      }
+
+      String finalFlow;
+      if (flowFromInput != null) {
+        finalFlow = flowFromInput;
+      } else {
+        // 없으면 계산
+        final DateTime? startDate = tsStart?.toDate();
+        final DateTime? endDate = tsEnd?.toDate();
+        if (startDate != null) {
+          finalFlow = _calculateFlow(
+            startDate: startDate,
+            endDate: endDate,
+            cycleLength: data['cycleLength'] ?? existing['cycleLength'],
+            sensorStatus: data['sensorStatus'],
+          );
+        } else {
+          // 시작일이 없으면 기존 flow 유지 (없으면 before)
+          finalFlow = (existing['flow'] as String?) ?? 'before';
+        }
+      }
+
+      // ------ 3) 업데이트 페이로드 구성 ------
+      final payload = <String, dynamic>{
+        // 날짜는 정규화된 Timestamp만 쓴다
+        if (tsStart != null) 'startDate': tsStart,
+        // endDate를 명시적으로 null로 덮을 수도 있음
+        'endDate': tsEnd, 
+        // 기타 전달된 값도 머지 (단, start/end/flow/updatedAt은 우리가 관리)
+        ...data..remove('startDate')..remove('endDate')..remove('flow')..remove('updatedAt'),
+        'flow': finalFlow,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await ref.update(payload);
+
+      // 디버깅: 서버에서 재확인
+      final check = await ref.get(const GetOptions(source: Source.server));
+      print('[updatePeriodData] saved: ${check.data()}');
+
+      print('생리 정보 업데이트 성공!');
+      return true;
+    } catch (e) {
+      print('생리 정보 업데이트 실패: $e');
+      return false;
+    }
+  }
+  /*
+  Future<bool> updatePeriodData(String periodId, Map<String, dynamic> data) async {
+    try {
       // 기존 데이터 먼저 가져오기
       DocumentSnapshot doc = await _col.doc(periodId).get();
       if (!doc.exists) return false;
@@ -277,6 +371,7 @@ class PeriodService {
       return false;
     }
   }
+  */
 
   /// 특정 사용자의 최근 1개 생리 기록을 실시간으로 가져오는 스트림
   Stream<Map<String, dynamic>?> latestPeriodStream(String userId) {
@@ -295,13 +390,29 @@ class PeriodService {
   /// 사용자의 최신 생리 flow만 가져오기
   Future<String?> getLatestFlow(String userId) async {
     try {
-      final latestPeriod = await getLatestPeriod(userId);
-      return latestPeriod?['flow'] as String?;
+      final latest = await getLatestPeriod(userId);
+      if (latest == null) return null;
+
+      final raw = latest['flow'];
+      if (raw is String) {
+        final v = raw.trim();
+        return v.isNotEmpty ? v : null; // 빈 문자열이면 null
+      }
+      return null;
     } catch (e) {
       print('최근 flow 조회 실패: $e');
       return null;
     }
-  }
+}
+  // Future<String?> getLatestFlow(String userId) async {
+  //   try {
+  //     final latestPeriod = await getLatestPeriod(userId);
+  //     return latestPeriod?['flow'] as String?;
+  //   } catch (e) {
+  //     print('최근 flow 조회 실패: $e');
+  //     return null;
+  //   }
+  // }
 
   /// flow별 메시지 가져오기 (새로운 메시지 체계)
   String getFlowMessage(String flow) {
