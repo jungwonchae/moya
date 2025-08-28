@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'menstrual_controller.dart';
+import 'notification_controller.dart';
+
 
 class BluetoothController extends GetxController {
   var isBluetoothEnabled = false.obs;

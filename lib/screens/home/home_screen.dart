@@ -22,7 +22,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // Firebase에서 가져올 데이터들
   String? name;
-  String currentFlow = 'before'; // before, safe, warning, need
+  String? currentFlow; // before, safe, warning, need
   int daysUntilNext = 5;
   bool isOnPeriod = false;
   
@@ -257,8 +257,8 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() { 
           name = fetchedUserName;
           currentFlow = fetchedFlow ?? 'before';
-          padStatus = _convertFlowToPadStatus(currentFlow);
-          
+          padStatus = _convertFlowToPadStatus((currentFlow!)); // UI에서만 fallback
+  
           if (latestPeriod != null) {
             _calculateDaysUntilNext(latestPeriod);
           }
@@ -274,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           // 초기값
           // 이름은 강제로 기본값을 넣지 않음 (null 유지)
-          currentFlow = 'before';
+          // currentFlow = 'before';
           padStatus = PadStatus.before;
           _isLoading = false;
         });
@@ -324,14 +324,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ↓ 디버그용 플래그
-  final bool _mockBluetoothConnected = true;
+  // final bool _mockBluetoothConnected = true;
 
   @override
   Widget build(BuildContext context) {
     final bluetooth = context.watch<BluetoothProvider>();
 
-    final bool isConnectedForUI =
-        _mockBluetoothConnected ? true : bluetooth.isConnected;
+    // final bool isConnectedForUI =
+    //     _mockBluetoothConnected ? true : bluetooth.isConnected;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -374,8 +374,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               alignment: Alignment.centerLeft,
                               child: BluetoothStatusChip(
                                 // ↓ 여기서 강제로 true 사용
-                                  isConnected: isConnectedForUI,
-                                // isConnected: bluetooth.isConnected,
+                                  // isConnected: isConnectedForUI,
+                                isConnected: bluetooth.isConnected,
                                 onTap: () => Navigator.pushNamed(context, '/setting_bluetooth'),
                               ),
                             ),
@@ -426,7 +426,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               Text('디버그 정보:', style: TextStyle(fontWeight: FontWeight.bold)),
                               Text('사용자: ${name ?? '(이름 없음)'}'),
                               Text('현재 상태: $currentFlow'),
-                              Text('메시지: ${_periodService.getFlowMessage(currentFlow)}'),
+                              Text('메시지: ${_periodService.getFlowMessage(currentFlow!)}'),
                               Text('다음까지: ${daysUntilNext}일'),
                               Text('생리 중: $isOnPeriod'),
                             ],

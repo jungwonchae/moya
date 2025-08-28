@@ -6,9 +6,6 @@ import '../screens/input_period/input_period_cycle_screen.dart';
 import '../screens/input_period/input_period_days_screen.dart';
 import '../screens/input_period/input_period_extra_screen.dart';
 import '../screens/input_ble/input_ble_initial_screen.dart';
-import '../screens/usage/usage_first_screen.dart';
-import '../screens/usage/usage_second_screen.dart';
-import '../screens/usage/usage_third_screen.dart';
 import '../screens/home/home_screen.dart';
 import 'menstrual_controller.dart';
 
@@ -46,15 +43,6 @@ class OnboardingController extends GetxController {
         break;
       case 7:
         Get.to(() => InputBleInitialScreen());
-        break;
-      case 8:
-        Get.to(() => UsageFirstScreen());
-        break;
-      case 9:
-        Get.to(() => UsageSecondScreen());
-        break;
-      case 10:
-        Get.to(() => UsageThirdScreen());
         break;
       default:
         // 온보딩 완료 -> 홈으로 이동
