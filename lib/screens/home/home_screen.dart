@@ -51,6 +51,11 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<bool>? _bleConnectionSub;
   StreamSubscription<List<int>>? _sensorDataSub;
 
+  // ===== 오늘자 교체 현황 상태 =====
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _dailySub;
+  int _todayChangeCount = 0;
+  String _lastChangeText = '-';
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _periodSub?.cancel();
     _bleConnectionSub?.cancel();
     _sensorDataSub?.cancel();
+    _dailySub?.cancel();
     super.dispose();
   }
 
@@ -109,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (periodId != null) {
         _ble.setPeriodId(periodId); // 중앙 서비스에 periodId 전달
         _subscribePeriodDoc(periodId); // UI는 실시간 반영만
+        _subscribeTodayStats(periodId); // 오늘자 교체 현황 구독
       }
     } catch (e) {
       if (!mounted) return;
@@ -253,6 +260,55 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refresh() => _loadUserData();
 
+  // YYYY-MM-DD
+  String _todayKey() {
+    final now = DateTime.now();
+    return '${now.year.toString().padLeft(4,'0')}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}';
+  }
+
+  // 사람이 읽기 쉬운 “몇 분 전” 형태
+  String _formatAgo(DateTime t) {
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 1) return '방금 전';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}분 전';
+    if (diff.inHours < 24) return '${diff.inHours}시간 전';
+    return '${diff.inDays}일 전';
+  }
+
+  // 오늘자 일일 통계 구독 시작
+  void _subscribeTodayStats(String periodId) {
+    _dailySub?.cancel();
+    final dayId = _todayKey();
+    _dailySub = FirebaseFirestore.instance
+        .collection('periods')
+        .doc(periodId)
+        .collection('daily')
+        .doc(dayId)
+        .snapshots()
+        .listen((doc) {
+      final data = doc.data();
+      if (!mounted || data == null) {
+        setState(() {
+          _todayChangeCount = 0;
+          _lastChangeText = '-';
+        });
+        return;
+      }
+
+      final cnt = (data['changeCount'] as num?)?.toInt() ?? 0;
+      final ts  = data['lastChangeAt'];
+      String nice = '-';
+      if (ts is Timestamp) {
+        nice = _formatAgo(ts.toDate());
+      }
+
+      setState(() {
+        _todayChangeCount = cnt;
+        _lastChangeText   = nice;
+      });
+    });
+  }
+
   // 사용자가 PeriodWidget에서 수동으로 상태 바꿀 경우(테스트용)
   void _onStatusChanged(PadStatus s) async {
     setState(() => padStatus = s);
@@ -339,8 +395,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 'quickInput': true,
                               },
                             ),
-                            changeCount: 0,
-                            lastChangeText: '',
+                            changeCount: _todayChangeCount, 
+                            lastChangeText: _lastChangeText,
                           ),
                         ),
                       ),
@@ -348,29 +404,29 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 32),
 
                       // ===== 디버그 정보 =====
-                      Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('디버그 정보:', style: TextStyle(fontWeight: FontWeight.bold)),
-                              Text('사용자: ${name ?? '(이름 없음)'}'),
-                              Text('현재 상태: $currentFlow'),
-                              Text('다음까지: ${daysUntilNext}일'),
-                              Text('생리 중: $isOnPeriod'),
-                              Text('BLE 연결: ${_isBleConnected ? '연결됨' : '연결 안됨'}'),
-                              if (_latestSensorData != null) Text('최신 센서값: $_latestSensorData'),
-                              Text('마지막 수신: ${DateTime.now().difference(_lastDataTime).inSeconds}초 전'),
-                            ],
-                          ),
-                        ),
-                      ),
+                      // Padding(
+                      //   padding: const EdgeInsets.all(24),
+                      //   child: Container(
+                      //     padding: const EdgeInsets.all(16),
+                      //     decoration: BoxDecoration(
+                      //       color: Colors.grey[100],
+                      //       borderRadius: BorderRadius.circular(12),
+                      //     ),
+                      //     child: Column(
+                      //       crossAxisAlignment: CrossAxisAlignment.start,
+                      //       children: [
+                      //         const Text('디버그 정보:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      //         Text('사용자: ${name ?? '(이름 없음)'}'),
+                      //         Text('현재 상태: $currentFlow'),
+                      //         Text('다음까지: ${daysUntilNext}일'),
+                      //          Text('생리 중: $isOnPeriod'),
+                      //         Text('BLE 연결: ${_isBleConnected ? '연결됨' : '연결 안됨'}'),
+                      //         if (_latestSensorData != null) Text('최신 센서값: $_latestSensorData'),
+                      //         Text('마지막 수신: ${DateTime.now().difference(_lastDataTime).inSeconds}초 전'),
+                      //       ],
+                      //     ),
+                      //   ),
+                      // ),
                     ],
                   ),
                 ),

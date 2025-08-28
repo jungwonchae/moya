@@ -40,6 +40,17 @@ class _PeriodWidgetState extends State<PeriodWidget> {
     _status = widget.status;
   }
 
+  // 부모가 내려주는 status가 바뀌면 내부 상태도 동기화
+  @override
+  void didUpdateWidget(covariant PeriodWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.status != widget.status) {
+      setState(() {
+        _status = widget.status;
+      });
+    }
+  }
+
   // 아이콘 경로
   String get _icon {
     switch (_status) {
