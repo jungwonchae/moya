@@ -112,8 +112,8 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
         if (existingEndDate != null) {
           selectedDate = existingEndDate;
         } else if (recentStartDate != null) {
-          // 종료일이 없으면 시작일 + 1일로 설정
-          selectedDate = recentStartDate!.add(const Duration(days: 1));
+          // 종료일이 없으면 시작일(같은 날)로 설정
+          selectedDate = recentStartDate!;
         }
         
         print('[ExtraScreen] Loaded - endDate: $existingEndDate, medication: $isOnMedication');
@@ -146,7 +146,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
       setState(() {
         recentStartDate = startOnly;
         if (selectedOnly.isBefore(startOnly)) {
-          selectedDate = startOnly.add(const Duration(days: 1));
+          selectedDate = startOnly;
         }
       });
     } else {
@@ -167,19 +167,19 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
   // 플랫폼별 날짜 선택
   Future<void> _pickDateAdaptive() async {
     if (recentStartDate == null) return;
-    
+    final minSelectableDate = recentStartDate!.subtract(const Duration(days: 120)); // 시작일 이전(최대 120일 전)도 허용
     if (Platform.isIOS) {
       _showCupertinoDatePicker();
     } else {
       final picked = await showDatePicker(
         context: context,
         initialDate: selectedDate,
-        firstDate: recentStartDate!,
+        firstDate: minSelectableDate,
         lastDate: DateTime(2035),
         helpText: '날짜 선택',
       );
       if (picked != null) setState(() => selectedDate = picked);
-    } 
+    }
   }
 
   // iOS 스타일 모달 피커
@@ -187,7 +187,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
     if (recentStartDate == null) return;
     
     DateTime temp = selectedDate;
-    final min = recentStartDate!;
+    final min = recentStartDate!.subtract(const Duration(days: 120)); // 시작일 이전도 허용
     final max = DateTime.now().add(const Duration(days: 365));
 
     showCupertinoModalPopup(
@@ -268,9 +268,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
           final updateData = <String, dynamic>{};
           
           // 종료일 저장
-          if (selectedDate != recentStartDate) {
-            updateData['endDate'] = Timestamp.fromDate(selectedDate);
-          }
+          updateData['endDate'] = Timestamp.fromDate(selectedDate);
           
           // 피임약 정보 저장
           if (isOnMedication != null) {
@@ -279,9 +277,8 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
           
           // extraData로도 저장 (호환성을 위해)
           Map<String, dynamic> extraData = {};
-          if (selectedDate != recentStartDate) {
-            extraData['endDate'] = selectedDate;
-          }
+          extraData['endDate'] = selectedDate;
+          
           if (isOnMedication != null) {
             extraData['medication'] = isOnMedication;
           }
@@ -439,7 +436,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                 padding: const EdgeInsets.all(12),
                 margin: const EdgeInsets.only(bottom: 15),
                 child: Text(
-                  '생리 시작일(${formatKoreanDate(recentStartDate!)}) 이후 날짜만 선택 가능합니다.',
+                  '생리 시작일(${formatKoreanDate(recentStartDate!)}) 이전 날짜도 선택할 수 있어요. (보통 이전 생리의 종료일을 선택해요)',
                   textAlign: TextAlign.left,
                   style: TextStyle(
                     fontSize: 12,
@@ -480,7 +477,7 @@ class _InputPeriodExtraScreenState extends State<InputPeriodExtraScreen> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    recentStartDate != null ? '탭하여 날짜 변경' : '생리 시작일 정보가 필요합니다',
+                    recentStartDate != null ? '탭하여 날짜 변경 (시작일 이전 날짜도 가능)' : '생리 시작일 정보가 필요합니다',
                     style: TextStyle(
                       fontSize: 12, 
                       color: recentStartDate != null ? ColorTheme.textLightGray : Colors.red[400],

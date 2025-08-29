@@ -22,7 +22,8 @@ class FluidClassifier {
 
   FluidClassifier({
     this.diffThreshold = 40,
-    this.window = const Duration(minutes: 1),
+    this.window = const Duration(minutes: 1), // 1분
+    // this.window = const Duration(seconds: 30),
   });
 
   /// 새로운 샘플을 추가하고, 현재 시점에서의 분류 결과를 반환합니다

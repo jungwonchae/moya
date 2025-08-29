@@ -29,6 +29,7 @@ dependencies:
   firebase_auth: ^6.0.1
   flutter_reactive_ble: ^5.3.1 #ble 통신
   flutter_local_notifications: ^17.2.1 #알림 배너
+  model_viewer_plus: ^1.7.2 #3D 모델링
 
 dev_dependencies:
   flutter_test:
@@ -44,6 +45,9 @@ flutter:
     - assets/lottie/scan.json
     - assets/lottie/sa.json
     - assets/lottie/searching.json
+    - assets/3d/moya_light.glb
+    - assets/3d/moya_hw.glb
+
 
   fonts:
     - family: Pretendard

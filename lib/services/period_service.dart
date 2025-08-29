@@ -454,4 +454,114 @@ class PeriodService {
       'updatedAt': raw['updatedAt'],
     };
   }
+  // PeriodService에 추가할 메서드들
+
+/// 생리 시작일과 기간 정보를 저장
+Future<void> savePeriodStartInfo({
+  required String periodId,
+  required DateTime startDate,
+  int? periodLength, // null 허용
+}) async {
+  try {
+    // periodLength가 null이면 기존 데이터에서 가져오기
+    int finalPeriodLength;
+    if (periodLength != null) {
+      finalPeriodLength = periodLength;
+    } else {
+      // 기존 period 데이터에서 periodLength 조회
+      final periodDoc = await FirebaseFirestore.instance
+          .collection('periods')
+          .doc(periodId)
+          .get();
+      
+      finalPeriodLength = (periodDoc.data()?['periodLength'] as int?) ?? 5; // 기본값 5일
+      debugPrint('[PeriodService] periodLength from existing data: $finalPeriodLength');
+    }
+
+    // 1. period 문서 업데이트
+    await FirebaseFirestore.instance
+        .collection('periods')
+        .doc(periodId)
+        .update({
+      'startDate': Timestamp.fromDate(startDate),
+      'isOnPeriod': true,
+      'flow': 'safe',
+      'lastSensorUpdate': FieldValue.serverTimestamp(),
+    });
+
+    // 2. 생리 날짜별로 타입 저장 (startDay, periodDay)
+    for (int i = 0; i < finalPeriodLength; i++) {
+      final currentDate = startDate.add(Duration(days: i));
+      final dayKey = _formatDateKey(currentDate);
+      
+      await FirebaseFirestore.instance
+          .collection('periods')
+          .doc(periodId)
+          .collection('periodDays')
+          .doc(dayKey)
+          .set({
+        'date': Timestamp.fromDate(currentDate),
+        'isStartDay': i == 0, // 첫날만 시작일
+        'isPeriodDay': true,   // 모든 날이 생리일
+        'dayOfPeriod': i + 1,  // 1일차, 2일차, ...
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    debugPrint('[PeriodService] 생리 기간 정보 저장 완료: $periodId, 시작일: $startDate, 기간: ${finalPeriodLength}일');
+  } catch (e) {
+    debugPrint('[PeriodService] 생리 기간 정보 저장 실패: $e');
+    rethrow;
+  }
+}
+
+/// 캘린더용 생리 날짜들과 타입 정보 가져오기
+Future<Map<String, dynamic>> getPeriodDatesWithTypes(String userId) async {
+  try {
+    final latestPeriod = await getLatestPeriod(userId);
+    if (latestPeriod == null) return {'periodDates': <DateTime>[], 'startDates': <DateTime>[]};
+
+    final periodId = latestPeriod['periodId'] as String;
+    
+    final periodDaysSnap = await FirebaseFirestore.instance
+        .collection('periods')
+        .doc(periodId)
+        .collection('periodDays')
+        .get();
+
+    final List<DateTime> periodDates = [];
+    final List<DateTime> startDates = [];
+
+    for (final doc in periodDaysSnap.docs) {
+      final data = doc.data();
+      final dateTs = data['date'] as Timestamp?;
+      if (dateTs != null) {
+        final date = dateTs.toDate();
+        
+        if (data['isPeriodDay'] == true) {
+          periodDates.add(date);
+        }
+        
+        if (data['isStartDay'] == true) {
+          startDates.add(date);
+        }
+      }
+    }
+
+    return {
+      'periodDates': periodDates,
+      'startDates': startDates,
+    };
+  } catch (e) {
+    debugPrint('[PeriodService] 생리 날짜 타입 정보 조회 실패: $e');
+    return {'periodDates': <DateTime>[], 'startDates': <DateTime>[]};
+  }
+}
+
+/// 날짜를 YYYY-MM-DD 형식으로 포맷
+String _formatDateKey(DateTime date) {
+  return '${date.year.toString().padLeft(4, '0')}-'
+         '${date.month.toString().padLeft(2, '0')}-'
+         '${date.day.toString().padLeft(2, '0')}';
+}
 }
