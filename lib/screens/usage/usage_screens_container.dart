@@ -4,6 +4,8 @@ import 'package:moya_app/themes/colortheme.dart';
 
 import 'package:moya_app/widgets/lamp_widget.dart';
 import 'package:moya_app/widgets/wearable_widget.dart';
+import 'package:model_viewer_plus/model_viewer_plus.dart'; //3d 모델링
+
 
 
 
@@ -166,12 +168,20 @@ class _UsageFirstPage extends StatelessWidget {
           // 중앙 이미지 영역
           Expanded(
             child: Center(
-              child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: 300,
-                  maxHeight: 400,
+              child: SizedBox(
+                width: 250,
+                height: 250,
+                child: ModelViewer(
+                  src: 'assets/3d/moya_hw.glb',   // 에셋 경로
+                  alt: 'My Blender GLB',
+                  cameraControls: true,            // 드래그/줌
+                  autoRotate: true,                // 자동 회전
+                  disableZoom: false,
+                  exposure: 1.0,
+                  shadowIntensity: 1.0,
+                  ar: false,                       // iOS는 usdz 필요, Android는 glb만으로 가능
+                  backgroundColor: Colors.white,
                 ),
-                child: const WearableDeviceWidget(), // ✅ SVG 대신 위젯 넣기
               ),
             ),
           ),
@@ -219,12 +229,20 @@ class _UsageSecondPage extends StatelessWidget {
           // 중앙 이미지 영역
           Expanded(
             child: Center(
-              child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: 300,
-                  maxHeight: 400,
+              child: SizedBox(
+                width: 250,
+                height: 250,
+                child: ModelViewer(
+                  src: 'assets/3d/moya_light.glb',   // 에셋 경로
+                  alt: 'My Blender GLB',
+                  cameraControls: true,            // 드래그/줌
+                  autoRotate: true,                // 자동 회전
+                  disableZoom: false,
+                  exposure: 1.0,
+                  shadowIntensity: 1.0,
+                  ar: false,                       // iOS는 usdz 필요, Android는 glb만으로 가능
+                  backgroundColor: Colors.white,
                 ),
-                child: LampWidget(),
               ),
             ),
           ),

@@ -8,8 +8,6 @@ enum PadStatus { before, fresh, warning, danger }
 /// 얼굴 + 상태문구 + (옵션) 데모 토글 + (내장) 아래 섹션(시작 전/후)
 class PeriodWidget extends StatefulWidget {
   final PadStatus status;                 // 초기 상태
-  /// 생리 시작 여부(UI 분기용)
-  final bool started;
   final bool showDemoToggle;              // 데모 토글 노출
   final ValueChanged<PadStatus>? onStatusChanged; // 상태 변경 콜백(선택)
   final VoidCallback? onStartTap;         // "생리 시작 하셨나요?" CTA 탭 콜백
@@ -21,7 +19,6 @@ class PeriodWidget extends StatefulWidget {
   const PeriodWidget({
     super.key,
     required this.status,
-    required this.started,
     this.showDemoToggle = true,
     this.onStatusChanged,
     this.onStartTap,
@@ -151,7 +148,7 @@ class _PeriodWidgetState extends State<PeriodWidget> {
         const SizedBox(height: 14),
 
         // ▼ 아래 섹션: 시작 전이면 CTA 카드, 그 외엔 교체현황 카드
-        if (!widget.started)
+        if (_status == PadStatus.before)
           _PeriodStartCtaCard(width: cardWidth, onTap: widget.onStartTap)
         else
           _PadStatsCard(

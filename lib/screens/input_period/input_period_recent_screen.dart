@@ -323,28 +323,36 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
     setState(() => _saving = true);
     try {
       if (isQuickInputMode) {
-        // 홈에서 온 간단 입력 모드: 최신 period를 찾아서 flow 상태 업데이트
+        // 홈에서 온 간단 입력 모드: 최신 period를 찾아서 업데이트
         final latestPeriod = await _service.getLatestPeriod(userId);
         
         if (latestPeriod != null && latestPeriod['periodId'] != null) {
-          // 기존 period가 있으면 flow 상태와 startDate만 업데이트
+          // 기존 period가 있으면 생리 시작 정보 업데이트
           final existingPeriodId = latestPeriod['periodId'] as String;
-          await _service.updatePeriodData(existingPeriodId, {
-            'startDate': selectedDate,
-            'flow': 'safe', // 기기 기준 flow 사용: 시작 시 기본 safe
-          });
-          print('[RecentScreen] Updated period flow status: $existingPeriodId, startDate: $selectedDate, flow: safe');
+          
+          // 🆕 새로운 메서드 사용: 생리 시작일과 기간 정보 저장
+          await _service.savePeriodStartInfo(
+            periodId: existingPeriodId,
+            startDate: selectedDate,
+            periodLength: 5, // 기본 5일, 나중에 설정값으로 변경 가능
+          );
+          
+          print('[RecentScreen] Updated period with detailed info: $existingPeriodId, startDate: $selectedDate');
         } else {
-          // 기존 period가 없으면 새로 생성 (첫 사용자의 경우)
+          // 기존 period가 없으면 새로 생성
           periodId = await _service.createDraftWithNick(
             userId: userId,
             nick: (nick ?? '알림'),
           );
-          await _service.updatePeriodData(periodId, {
-            'startDate': selectedDate,
-            'flow': 'safe', // 기기 기준 flow 초기값
-          });
-          print('[RecentScreen] Created new period: $periodId with startDate: $selectedDate, flow: safe');
+          
+          // 🆕 새로운 메서드 사용: 생리 시작일과 기간 정보 저장
+          await _service.savePeriodStartInfo(
+            periodId: periodId,
+            startDate: selectedDate,
+            periodLength: 5,
+          );
+          
+          print('[RecentScreen] Created new period with detailed info: $periodId, startDate: $selectedDate');
         }
 
         // 홈으로 돌아가기
@@ -355,7 +363,6 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
           ),
         );
         
-        // 모든 화면을 제거하고 홈으로 이동 (홈 화면이 새로 빌드됨)
         Navigator.of(context).pushNamedAndRemoveUntil(
           '/home',
           (Route<dynamic> route) => false,
@@ -364,7 +371,6 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
       }
       
       if (periodId == null || periodId.isEmpty) {
-        // 드래프트가 없으면 새로 생성
         periodId = await _service.createDraftWithNick(
           userId: userId,
           nick: (nick ?? '알림'),
@@ -372,17 +378,25 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
         print('[RecentScreen] draft created: $periodId');
       }
 
-      // Firebase에 startDate 저장
-      await _service.updatePeriodData(periodId, {
-        'startDate': selectedDate,
-      });
-      print('[RecentScreen] startDate saved: $selectedDate for periodId=$periodId');
-
+      // 일반 모드에서도 새로운 메서드 사용
       if (isEditMode) {
-        // 수정 모드면 뒤로가기
+        // 수정 모드면 기존 데이터 업데이트
+        await _service.updatePeriodData(periodId, {
+          'startDate': selectedDate,
+        });
+        // 기간 정보도 다시 생성
+        await _service.savePeriodStartInfo(
+          periodId: periodId,
+          startDate: selectedDate,
+          periodLength: 5,
+        );
         Navigator.pop(context);
       } else {
-        // 일반 모드면 다음 화면으로
+        // 일반 모드면 기본 정보만 저장하고 다음 단계로
+        await _service.updatePeriodData(periodId, {
+          'startDate': selectedDate,
+        });
+        
         Navigator.pushNamed(
           context,
           '/input_cycle',
@@ -403,7 +417,7 @@ class _InputPeriodRecentScreenState extends State<InputPeriodRecentScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
-
+  
   @override
   Widget build(BuildContext context) {
     if (_loading) {

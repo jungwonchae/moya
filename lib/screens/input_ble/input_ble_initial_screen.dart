@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:moya_app/themes/colortheme.dart';
 import 'package:moya_app/widgets/confirm_button.dart';
+import 'package:moya_app/services/ble_service.dart';
 
 class InputBleInitialScreen extends StatefulWidget {
   @override
@@ -9,11 +12,93 @@ class InputBleInitialScreen extends StatefulWidget {
 }
 
 class _InputBleInitialScreenState extends State<InputBleInitialScreen> {
+  final BleService _ble = BleService();
+  
   bool isScanning = false;
   BluetoothDevice? selectedDevice;
-  List<BluetoothDevice> availableDevices = [
-    BluetoothDevice(name: 'MOYA', address: 'D7:1E:F2:AF:B9:77'),
-  ];
+  List<ScanResult> availableDevices = [];
+  
+  // 구독
+  StreamSubscription<bool>? _subConn;
+  StreamSubscription<bool>? _subScan;
+  StreamSubscription<List<ScanResult>>? _subScanResults;
+  
+  @override
+  void initState() {
+    super.initState();
+    _initializeBle();
+  }
+  
+  void _initializeBle() {
+    // 연결 상태 구독
+    _subConn = _ble.connectionStream.listen((connected) {
+      if (!mounted) return;
+      // 연결된 기기가 있으면 선택 상태로 설정
+      setState(() {});
+    });
+
+    // 스캔 상태 구독
+    _subScan = _ble.isScanningStream.listen((scanning) {
+      if (!mounted) return;
+      setState(() => isScanning = scanning);
+    });
+
+    // 스캔 결과 구독
+    _subScanResults = FlutterBluePlus.scanResults.listen((results) {
+      if (!mounted) return;
+      
+      // MOYA/NUS 기기만 필터링
+      final filtered = <ScanResult>[];
+      for (final r in results) {
+        final name = r.advertisementData.advName;
+        final svcList = r.advertisementData.serviceUuids.map((e) => e.toString().toUpperCase());
+        final matches = (name.toUpperCase().contains('MOYA') ||
+                         svcList.contains('6E400001-B5A3-F393-E0A9-E50E24DCCA9E'));
+        if (matches) {
+          // 중복 제거
+          if (filtered.indexWhere((e) => e.device.remoteId.str == r.device.remoteId.str) < 0) {
+            filtered.add(r);
+          }
+        }
+      }
+      
+      setState(() {
+        availableDevices = filtered;
+      });
+    });
+    
+    // 자동으로 스캔 시작
+    _startScan();
+  }
+  
+  @override
+  void dispose() {
+    _subConn?.cancel();
+    _subScan?.cancel();
+    _subScanResults?.cancel();
+    super.dispose();
+  }
+  
+  Future<void> _startScan() async {
+    try {
+      await _ble.startScan();
+    } catch (e) {
+      _showToast('스캔 시작 실패: $e', isError: true);
+    }
+  }
+  
+  void _showToast(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red : ColorTheme.subColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -68,7 +153,7 @@ class _InputBleInitialScreenState extends State<InputBleInitialScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (availableDevices.isEmpty && !isScanning)
+                    if (availableDevices.isEmpty && isScanning)
                       // 검색 중일 때 표시
                       Expanded(
                         child: Center(
@@ -91,7 +176,40 @@ class _InputBleInitialScreenState extends State<InputBleInitialScreen> {
                         ),
                       ),
                     
-                    // 찾은 기기들 - 리스트뷰로 변경하여 꽉 차게
+                    if (availableDevices.isEmpty && !isScanning)
+                      // 검색 완료했지만 기기가 없을 때
+                      Expanded(
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.bluetooth_searching,
+                                color: ColorTheme.textGray,
+                                size: 48,
+                              ),
+                              SizedBox(height: 20),
+                              Text(
+                                'MOYA 기기를 찾을 수 없습니다',
+                                style: TextStyle(
+                                  color: ColorTheme.textGray,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              SizedBox(height: 10),
+                              TextButton(
+                                onPressed: _startScan,
+                                child: Text(
+                                  '다시 검색',
+                                  style: TextStyle(color: ColorTheme.subColor),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    
+                    // 찾은 기기들
                     if (availableDevices.isNotEmpty)
                       Expanded(
                         child: ListView.builder(
@@ -124,14 +242,20 @@ class _InputBleInitialScreenState extends State<InputBleInitialScreen> {
     );
   }
   
-  Widget _buildDeviceItem(BluetoothDevice device) {
-    bool isConnected = selectedDevice?.address == device.address;
+  Widget _buildDeviceItem(ScanResult scanResult) {
+    final device = scanResult.device;
+    final name = scanResult.advertisementData.advName.isNotEmpty
+        ? scanResult.advertisementData.advName
+        : (device.platformName.isNotEmpty ? device.platformName : 'MOYA');
+    final address = device.remoteId.str;
+    
+    bool isConnected = selectedDevice?.remoteId.str == device.remoteId.str;
     
     return Container(
       width: double.infinity,
       margin: EdgeInsets.only(bottom: 12),
       child: GestureDetector(
-        onTap: () => _connectToDevice(device),
+        onTap: () => _connectToDevice(scanResult),
         child: Container(
           padding: EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -182,7 +306,7 @@ class _InputBleInitialScreenState extends State<InputBleInitialScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      device.address,
+                      address,
                       style: TextStyle(
                         fontSize: 12,
                         color: isConnected 
@@ -192,7 +316,7 @@ class _InputBleInitialScreenState extends State<InputBleInitialScreen> {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      device.name,
+                      name,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
@@ -225,29 +349,26 @@ class _InputBleInitialScreenState extends State<InputBleInitialScreen> {
     );
   }
   
-  void _connectToDevice(BluetoothDevice device) {
-    // 연결 처리
-    setState(() {
-      selectedDevice = device;
-    });
-    
-    // 연결 성공 메시지
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${device.name}에 연결되었습니다!'),
-        backgroundColor: ColorTheme.subColor,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
-    );
+  Future<void> _connectToDevice(ScanResult scanResult) async {
+    try {
+      // 연결 시도
+      await _ble.connect(scanResult.device);
+      
+      setState(() {
+        selectedDevice = scanResult.device;
+      });
+      
+      // 연결 성공 메시지
+      final deviceName = scanResult.advertisementData.advName.isNotEmpty
+          ? scanResult.advertisementData.advName
+          : (scanResult.device.platformName.isNotEmpty 
+              ? scanResult.device.platformName 
+              : 'MOYA');
+      
+      _showToast('${deviceName}에 연결되었습니다!');
+      
+    } catch (e) {
+      _showToast('연결 실패: $e', isError: true);
+    }
   }
-}
-
-class BluetoothDevice {
-  final String name;
-  final String address;
-  
-  BluetoothDevice({required this.name, required this.address});
 }

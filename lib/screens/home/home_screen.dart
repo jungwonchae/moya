@@ -17,6 +17,9 @@ import 'package:moya_app/services/ble_service.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'package:flutter/foundation.dart'; // kDebugMode
+
+
 class HomeScreen extends StatefulWidget {
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -159,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       if (latestPeriod != null) {
-        _calcDays(latestPeriod);
+        await _calcDays(latestPeriod);
       }
     } catch (e) {
       if (!mounted) return;
@@ -205,7 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _calcDays(Map<String, dynamic> latest) {
+  Future<void> _calcDays(Map<String, dynamic> latest) async {
     try {
       final now = DateTime.now();
       final startDate = (latest['startDate'] as Timestamp?)?.toDate();
@@ -261,6 +264,17 @@ class _HomeScreenState extends State<HomeScreen> {
         daysUntilNext = left;
         isOnPeriod = onPeriod;
       });
+
+      if (onPeriod && currentFlow == 'before') {
+        final periodId = latest['periodId'] as String?;
+        if (periodId != null) {
+          await _periodService.updateFlowBySensorStatus(periodId, 'safe');
+          setState(() {
+            currentFlow = 'safe';
+            padStatus = PadStatus.fresh;
+          });
+        }
+      }
     } catch (e) {
       debugPrint('[Home] 날짜 계산 실패: $e');
     }
@@ -382,10 +396,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             onBellTap: () => Navigator.pushNamed(context, '/notification'),
                           ),
                           if (_unreadCount > 0)
+                          // if (_unreadCount > 0 || kDebugMode)  // 디버그 빌드면 무조건 배지 표시
                             Positioned(
                               // bell 아이콘 위치에 맞춰 정확히 조정
-                              top: 52, // SafeArea + padding 고려
-                              right: 18, // bell 아이콘의 오른쪽 위 모서리 근처
+                              top: 40, // SafeArea + padding 고려
+                              right: 37, // bell 아이콘의 오른쪽 위 모서리 근처
                                child: Container(
                                 width: 8,
                                 height: 8,    
@@ -428,6 +443,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Center(
                           child: PeriodWidget(
                             status: padStatus,
+                            started: isOnPeriod,
                             showDemoToggle: false,
                             onStatusChanged: _onStatusChanged, // 테스트용 수동 변경
                             onStartTap: () => Navigator.pushNamed(
